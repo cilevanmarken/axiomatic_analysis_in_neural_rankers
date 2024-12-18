@@ -1,6 +1,8 @@
 # these folders can be ignored
 data/
-result_figures/
 results/
+result_figures/
+results/prepend
+results/append
 results_attn_pattern/
 results_head_decomp/
