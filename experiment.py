@@ -1,8 +1,10 @@
+# NOTE: set environment
+import os
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
+
 import torch
 import numpy as np
 import pandas as pd
-
-import os
 from tqdm import tqdm
 import random
 import glob
@@ -30,38 +32,37 @@ from patching_helpers import (
 )
 
 
-def run_experiment(experiment_type, perturb_type):
+def run_experiment(args):
     """
-        - experiment_type: what type of experiment to run (options below)
+        - args.experiment_type: what type of experiment to run (options below)
             - block : patches the residual stream (before each layer), attention block, and MLP outputs across individual tokens
             - head_all : patches all attention heads individually across all tokens
             - head_pos : patches all attention heads individualls across individual tokens
             - labels : generates the tokenized documents
-        - perturb_type : 
+        - args.perturb_type : 
             - prepend : additional term is injected at the beginning of the document
             - append : additional term is injected at the end of the document
+        - args.reduced_dataset : whether to use a reduced dataset
+        - args.n_queries : number of queries to use if using a reduced dataset
+        - args.n_docs : number of documents to use if using a reduced dataset
     """
     torch.set_grad_enabled(False)
     device = utils.get_device()
-
-    # NOTE: hoezo zetten deze OENEN de arguments hier
-    use_reduced_dataset = True
-    n_queries = 1
-    n_docs = 10 #100
+    print("Device:", device)
 
     # Load queries and docs from files
     fbase_path = "data"
 
     # Load files
-    tfc1_precomputed_scores = pd.read_csv(os.path.join(fbase_path, "tfc1_add_{}_target_qids_scores.csv".format(perturb_type)))
+    tfc1_precomputed_scores = pd.read_csv(os.path.join(fbase_path, "tfc1_add_{}_target_qids_scores.csv".format(args.perturb_type)))
     tfc1_add_queries = pd.read_csv(os.path.join(fbase_path, "tfc1_add_qids_with_text.csv"), header=None, names=["_id", "text"])
     tfc1_add_baseline_corpus = load_json_file(os.path.join(fbase_path, "tfc1_add_baseline_final_dd_corpus.json"))["corpus"]
-    tfc1_add_dd_corpus = load_json_file(os.path.join(fbase_path, "tfc1_add_{}_final_dd_corpus.json".format(perturb_type)))["corpus"]
+    tfc1_add_dd_corpus = load_json_file(os.path.join(fbase_path, "tfc1_add_{}_final_dd_corpus.json".format(args.perturb_type)))["corpus"]
 
     target_qids = tfc1_add_queries["_id"].tolist()
     tfc1_add_queries = tfc1_add_queries[tfc1_add_queries["_id"].isin(target_qids)]
-    if use_reduced_dataset:
-        target_qids = random.sample(tfc1_add_queries["_id"].tolist(), n_queries)
+    if args.reduced_dataset:
+        target_qids = random.sample(tfc1_add_queries["_id"].tolist(), args.n_queries)
         tfc1_add_queries = tfc1_add_queries[tfc1_add_queries["_id"].isin(target_qids)]
 
     pre_trained_model_name = "sebastian-hofstaetter/distilbert-dot-tas_b-b256-msmarco"
@@ -85,8 +86,8 @@ def run_experiment(experiment_type, perturb_type):
         
         # Get and preprocess documents
         target_docs = tfc1_add_dd_corpus[str(qid)]
-        if use_reduced_dataset:
-            target_doc_ids = random.sample(target_docs.keys(), n_docs)
+        if args.reduced_dataset:
+            target_doc_ids = random.sample(list(target_docs.keys()), args.n_docs)
             target_docs = {doc_id: target_docs[doc_id] for doc_id in target_doc_ids}
         corpus_dataloader = preprocess_corpus(target_docs, tokenizer)
 
@@ -116,13 +117,13 @@ def run_experiment(experiment_type, perturb_type):
 
                 # Hacky thing b/c of the way the diagnostic dataset was created (it was originally created just for prepend)
                 # So will always need to adjust the tokens for append
-                if perturb_type == "append":
+                if args.perturb_type == "append":
                     filler_tokens = torch.full((adj_n+1,), baseline_tokens["input_ids"][0][1]) # skip CLS token
                     filler_attn_mask = torch.full((adj_n+1,), baseline_tokens["attention_mask"][0][1]) 
                     adj_doc = torch.cat((baseline_tokens["input_ids"][0][2:-1], filler_tokens))
                     baseline_tokens["input_ids"] = torch.cat((cls_tok.view(1), adj_doc, sep_tok.view(1)), dim=0).view(1,-1)
                     baseline_tokens["attention_mask"] = torch.cat((baseline_tokens["attention_mask"][0][1:], filler_attn_mask), dim=0).view(1,-1)
-                elif perturb_type == "prepend":
+                elif args.perturb_type == "prepend":
                     # But for prepend, we only need to adjust if the lengths are different
                     if p_len != b_len:
                         filler_tokens = torch.full((adj_n,), baseline_tokens["input_ids"][0][1]) # skip CLS token
@@ -157,18 +158,18 @@ def run_experiment(experiment_type, perturb_type):
                 # Setup directories to save results
                 if not os.path.exists("results"):
                     os.mkdir("results")
-                if not os.path.exists(os.path.join("results", perturb_type)):
-                    os.mkdir(f"results/{perturb_type}")
+                if not os.path.exists(os.path.join("results", args.perturb_type)):
+                    os.mkdir(f"results/{args.perturb_type}")
                 if not os.path.exists("results_head_decomp"):
                     os.mkdir("results_head_decomp")
-                if not os.path.exists(os.path.join("results_head_decomp", perturb_type)):
-                    os.mkdir(f"results_head_decomp/{perturb_type}")
+                if not os.path.exists(os.path.join("results_head_decomp", args.perturb_type)):
+                    os.mkdir(f"results_head_decomp/{args.perturb_type}")
                 if not os.path.exists("results_attn_pattern"):
                     os.mkdir("results_attn_pattern")
 
                 
                 # Patch after each layer (residual stream, attention, MLPs)
-                if experiment_type == "block":
+                if args.experiment_type == "block":
                     act_patch_block_every = get_act_patch_block_every(
                         tl_model,
                         device,
@@ -177,11 +178,11 @@ def run_experiment(experiment_type, perturb_type):
                         ranking_metric
                     )
                     detached_block_results = act_patch_block_every.detach().cpu().numpy()
-                    np.save("results/{}/{}_{}_block.npy".format(perturb_type, qid, doc_id), detached_block_results)
+                    np.save("results/{}/{}_{}_block.npy".format(args.perturb_type, qid, doc_id), detached_block_results)
                     
 
                 # Patch attention heads
-                elif experiment_type == "head_all":
+                elif args.experiment_type == "head_all":
                     act_patch_attn_head_out_all_pos = get_act_patch_attn_head_out_all_pos(
                         tl_model,
                         device,
@@ -190,10 +191,10 @@ def run_experiment(experiment_type, perturb_type):
                         ranking_metric
                     )
                     detached_head_results = act_patch_attn_head_out_all_pos.detach().cpu().numpy()
-                    np.save("results/{}/{}_{}_head.npy".format(perturb_type, qid, doc_id), detached_head_results)
+                    np.save("results/{}/{}_{}_head.npy".format(args.perturb_type, qid, doc_id), detached_head_results)
 
                 # Patch heads by position
-                elif experiment_type == "head_pos":
+                elif args.experiment_type == "head_pos":
                     layer_head_list = [(0,9), (1,6), (2,3), (3,8)]
                     act_patch_attn_head_out_by_pos = get_act_patch_attn_head_by_pos(
                         tl_model,
@@ -204,20 +205,20 @@ def run_experiment(experiment_type, perturb_type):
                         layer_head_list
                     )
                     detached_head_pos_results = act_patch_attn_head_out_by_pos.detach().cpu().numpy()
-                    np.save("results_head_decomp/{}/{}_{}_head_by_pos.npy".format(perturb_type, qid, doc_id), detached_head_pos_results)
+                    np.save("results_head_decomp/{}/{}_{}_head_by_pos.npy".format(args.perturb_type, qid, doc_id), detached_head_pos_results)
 
-                elif experiment_type == "head_attn":
+                elif args.experiment_type == "head_attn":
                     # Get attention patterns for head
                     attn_heads = [(0,9), (1,6), (2,3), (3,8)]
                     for layer, head in attn_heads:
                         attn_pattern = perturbed_cache["pattern", layer][:,head].mean(0).detach().cpu().numpy()
-                        np.save("results_attn_pattern/{}/{}_{}_{}_{}_attn_pattern.npy".format(perturb_type, qid, doc_id, layer, head), attn_pattern)
+                        np.save("results_attn_pattern/{}/{}_{}_{}_{}_attn_pattern.npy".format(args.perturb_type, qid, doc_id, layer, head), attn_pattern)
 
                 
-                elif experiment_type == "labels":
+                elif args.experiment_type == "labels":
                     decoded_tokens = [tokenizer.decode(tok) for tok in batch["input_ids"][0]]
                     labels = ["{} {}".format(tok,i) for i, tok in enumerate(decoded_tokens)]
-                    with open("results/{}/{}_{}_labels.txt".format(perturb_type, qid, doc_id), "w") as f:
+                    with open("results/{}/{}_{}_labels.txt".format(args.perturb_type, qid, doc_id), "w") as f:
                         for item in labels:
                             f.write(str(item) + '\n')
 
@@ -230,15 +231,17 @@ def run_experiment(experiment_type, perturb_type):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run activation patching with the specific patching experiment and perturbation types.")
-    parser.add_argument("experiment_type", type=str, help="What will be patched (e.g., block).")
-    parser.add_argument("perturb_type", type=str, help="The perturbation to apply (e.g., append).")
-    
+    parser.add_argument("--experiment_type", default="block", choices=["block", "head_all", "head_pos", "head_attn", "labels"], 
+                        help="What will be patched (e.g., block).")
+    parser.add_argument("--perturb_type", default="prepend", choices=["append", "prepend"], 
+                        help="The perturbation to apply (e.g., append).")
+    parser.add_argument("--reduced_dataset", default=False, action='store_true',
+                        help="Whether to use a reduced dataset.")
+    parser.add_argument("--n_queries", type=int, default=1, 
+                        help="Number of queries to use if using a reduced dataset.")
+    parser.add_argument("--n_docs", type=int, default=1, 
+                        help="Number of documents to use if using a reduced dataset.")
+
     args = parser.parse_args()
-
-    valid_exp_types = {"block", "head_all", "head_pos", "head_attn", "labels"}
-    valid_perturb_types = {"append", "prepend"}
-
-    assert args.experiment_type in valid_exp_types, f"Invalid argument: experiment_type. Must be one of {valid_exp_types}."
-    assert args.perturb_type in valid_perturb_types, f"Invalid argument: perturb_type. Must be one of {valid_perturb_types}."
     
-    _ = run_experiment(args.experiment_type, args.perturb_type)
+    _ = run_experiment(args)

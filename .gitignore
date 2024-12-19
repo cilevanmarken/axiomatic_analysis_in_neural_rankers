@@ -6,3 +6,4 @@ results/prepend
 results/append
 results_attn_pattern/
 results_head_decomp/
+sketch.py
