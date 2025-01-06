@@ -1,3 +1,7 @@
+# NOTE: set environment
+import os
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -35,6 +39,8 @@ def load_json_file(file_path):
     return data
 
 def load_label_file(file_path):
+
+    # NOTE: changed encoding from utf-8 to ascii
     with open(file_path, 'r', encoding='utf-8') as file:
         lines = file.readlines()
     
@@ -289,7 +295,6 @@ def load_head_decomp_by_rank(decomp_results_path, labels_path, perturb_type, sco
     return np.mean(np.array(results), axis=0), np.mean(np.array(exists_results), axis=0), np.mean(np.array(not_exists_results), axis=0)
 
 
-
 '''
 Loads either block or head activation patching results for all queries.
 '''
@@ -317,7 +322,7 @@ def load_all_results(result_type, results_path, fname_list=None):
         results.append(result_data)
 
         # Load labels for blocks
-        split = file_path.split('/')[-1].split("_")
+        split = file_path.split('\\')[-1].split("_")
         query_id = split[0]
         document_id = split[1]
         doc_ids.append(document_id)
@@ -354,7 +359,6 @@ def get_query_data(query_id, query_dict, terms_dict):
     return query_dict[query_id], terms_dict[query_id]
 
 
-
 '''
 For block results, reformat into smaller segments.
 - Segment: [CLS] + [injected tokens] + [existing query term tokens] + [non query term tokens] + [SEP]
@@ -376,7 +380,6 @@ def segment_tokens_all(data, labels, qids, perturb_type, full_q_dict, selected_t
         
         selected_term_toks = qid_lookup[qid]["selected_term_toks"]
         full_q_tok_list = qid_lookup[qid]["full_query_toks"]
-
 
         # Get offset to find where original document starts and ends
         if perturb_type == "prepend": #prepend
@@ -461,7 +464,9 @@ def plot_blocks_plotly(data, labels, save_path):
     )
 
     if save_path:
-        pio.write_image(fig, save_path, scale=2)
+        # NOTE: pio write image is terribly slow
+        fig.write_html(save_path.replace('.png', '.html'))
+        # pio.write_image(fig, save_path, scale=1, format='png')
 
     return fig
 
@@ -625,15 +630,10 @@ def main(experiment_type, perturb_type):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Plot results.")
-    parser.add_argument("experiment_type", type=str, help="The result to plot (e.g. block).")
-    parser.add_argument("perturb_type", type=str, help="The perturbation to apply (e.g., append).")
-
+    parser.add_argument("--experiment_type", default="head_pos", choices=["block", "head_all", "head_pos", "head_attn", "labels"], 
+                        help="What will be patched (e.g., block).")
+    parser.add_argument("--perturb_type", default="prepend", choices=["append", "prepend"], 
+                        help="The perturbation to apply (e.g., append).")
     args = parser.parse_args()
-
-    valid_exp_types = {"block", "head_all", "head_pos", "head_attn"}
-    valid_perturb_types = {"append", "prepend"}
-
-    assert args.experiment_type in valid_exp_types, f"Invalid argument: experiment_type. Must be one of {valid_exp_types}."
-    assert args.perturb_type in valid_perturb_types, f"Invalid argument: perturb_type. Must be one of {valid_perturb_types}."
 
     _ = main(args.experiment_type, args.perturb_type)

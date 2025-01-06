@@ -156,16 +156,11 @@ def run_experiment(args):
 
 
                 # Setup directories to save results
-                if not os.path.exists("results"):
-                    os.mkdir("results")
-                if not os.path.exists(os.path.join("results", args.perturb_type)):
-                    os.mkdir(f"results/{args.perturb_type}")
-                if not os.path.exists("results_head_decomp"):
-                    os.mkdir("results_head_decomp")
-                if not os.path.exists(os.path.join("results_head_decomp", args.perturb_type)):
-                    os.mkdir(f"results_head_decomp/{args.perturb_type}")
-                if not os.path.exists("results_attn_pattern"):
-                    os.mkdir("results_attn_pattern")
+                os.makedirs("results", exist_ok=True)
+                os.makedirs(f"results/{args.perturb_type}", exist_ok=True)
+                os.makedirs("results_head_decomp", exist_ok=True)
+                os.makedirs(f"results_head_decomp/{args.perturb_type}", exist_ok=True)
+                os.makedirs(f"results_attn_pattern/{args.perturb_type}", exist_ok=True)
 
                 
                 # Patch after each layer (residual stream, attention, MLPs)
@@ -218,7 +213,7 @@ def run_experiment(args):
                 elif args.experiment_type == "labels":
                     decoded_tokens = [tokenizer.decode(tok) for tok in batch["input_ids"][0]]
                     labels = ["{} {}".format(tok,i) for i, tok in enumerate(decoded_tokens)]
-                    with open("results/{}/{}_{}_labels.txt".format(args.perturb_type, qid, doc_id), "w") as f:
+                    with open("results/{}/{}_{}_labels.txt".format(args.perturb_type, qid, doc_id), "w", encoding='utf-8') as f:
                         for item in labels:
                             f.write(str(item) + '\n')
 
@@ -231,9 +226,9 @@ def run_experiment(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run activation patching with the specific patching experiment and perturbation types.")
-    parser.add_argument("--experiment_type", default="block", choices=["block", "head_all", "head_pos", "head_attn", "labels"], 
+    parser.add_argument("--experiment_type", default="head_attn", choices=["block", "head_all", "head_pos", "head_attn", "labels"], 
                         help="What will be patched (e.g., block).")
-    parser.add_argument("--perturb_type", default="prepend", choices=["append", "prepend"], 
+    parser.add_argument("--perturb_type", default="append", choices=["append", "prepend"], 
                         help="The perturbation to apply (e.g., append).")
     parser.add_argument("--reduced_dataset", default=False, action='store_true',
                         help="Whether to use a reduced dataset.")
