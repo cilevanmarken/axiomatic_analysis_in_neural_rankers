@@ -51,13 +51,23 @@ def run_experiment(args):
     print("Device:", device)
 
     # Load queries and docs from files
-    fbase_path = "data"
+    fbase_path = f"data/{args.dataset}"
 
     # Load files
-    tfc1_precomputed_scores = pd.read_csv(os.path.join(fbase_path, "tfc1_add_{}_target_qids_scores.csv".format(args.perturb_type)))
-    tfc1_add_queries = pd.read_csv(os.path.join(fbase_path, "tfc1_add_qids_with_text.csv"), header=None, names=["_id", "text"])
-    tfc1_add_baseline_corpus = load_json_file(os.path.join(fbase_path, "tfc1_add_baseline_final_dd_corpus.json"))["corpus"]
-    tfc1_add_dd_corpus = load_json_file(os.path.join(fbase_path, "tfc1_add_{}_final_dd_corpus.json".format(args.perturb_type)))["corpus"]
+    if args.dataset == "TFC1-I":
+        baseline_path = os.path.join(fbase_path, f"TFC1-I_{args.perturb_type}_baseline.json")
+        perturbed_path = os.path.join(fbase_path, f"TFC1-I_{args.perturb_type}_corpus.json")
+    elif args.dataset == "TFC1-R":
+        # baseline is expected to rank higher, so we use the reverse
+        baseline_path = os.path.join(fbase_path, "TFC1-R_corpus.json")
+        perturbed_path = os.path.join(fbase_path, "TFC1-R_baseline.json")
+    elif args.dataset == "TFC2":
+        raise NotImplementedError("TFC2 not implemented yet.")
+    
+    # tfc1_precomputed_scores = pd.read_csv(os.path.join(fbase_path, "tfc1_add_{}_target_qids_scores.csv".format(args.perturb_type)))
+    tfc1_add_queries = pd.read_csv(os.path.join("data", "QIDs_with_text.csv"), header=None, names=["_id", "text"])
+    tfc1_add_baseline_corpus = load_json_file(baseline_path)["corpus"]
+    tfc1_add_dd_corpus = load_json_file(perturbed_path)["corpus"]
 
     target_qids = tfc1_add_queries["_id"].tolist()
     tfc1_add_queries = tfc1_add_queries[tfc1_add_queries["_id"].isin(target_qids)]
@@ -106,6 +116,7 @@ def run_experiment(args):
                     one_zero_attention_mask=batch["attention_mask"],
                     return_type="embeddings",
                 )
+                perturbed_embedding = perturbed_embeddings[:,0,:].squeeze(0) #.detach().cpu().numpy()
 
                 # Check lengths of pertubred and baseline tokens and adjust if needed
                 p_len = torch.sum(batch["attention_mask"])
@@ -143,8 +154,9 @@ def run_experiment(args):
 
                 # Get scores for baseline and perturbed documents
                 baseline_score = torch.matmul(q_embedding, baseline_embedding.t())
-                perturbed_score = torch.tensor(tfc1_precomputed_scores[(tfc1_precomputed_scores["qid"] == qid) & (tfc1_precomputed_scores["doc_id"] == int(doc_id))]["p_score"].item())
-
+                # NOTE: this is precomputed, 
+                # perturbed_score = torch.tensor(tfc1_precomputed_scores[(tfc1_precomputed_scores["qid"] == qid) & (tfc1_precomputed_scores["doc_id"] == int(doc_id))]["p_score"].item())
+                perturbed_score = torch.matmul(q_embedding, perturbed_embedding.t())
 
                 '''
                 Linear function of score diff, calibrated so that it equals 0 when performance is 
@@ -156,11 +168,11 @@ def run_experiment(args):
 
 
                 # Setup directories to save results
-                os.makedirs("results", exist_ok=True)
-                os.makedirs(f"results/{args.perturb_type}", exist_ok=True)
-                os.makedirs("results_head_decomp", exist_ok=True)
-                os.makedirs(f"results_head_decomp/{args.perturb_type}", exist_ok=True)
-                os.makedirs(f"results_attn_pattern/{args.perturb_type}", exist_ok=True)
+                os.makedirs(f"{args.result_folder}", exist_ok=True)
+                os.makedirs(f"{args.result_folder}/{args.perturb_type}", exist_ok=True)
+                os.makedirs(f"{args.result_folder}_head_decomp", exist_ok=True)
+                os.makedirs(f"{args.result_folder}_head_decomp/{args.perturb_type}", exist_ok=True)
+                os.makedirs(f"{args.result_folder}_attn_pattern/{args.perturb_type}", exist_ok=True)
 
                 
                 # Patch after each layer (residual stream, attention, MLPs)
@@ -173,7 +185,7 @@ def run_experiment(args):
                         ranking_metric
                     )
                     detached_block_results = act_patch_block_every.detach().cpu().numpy()
-                    np.save("results/{}/{}_{}_block.npy".format(args.perturb_type, qid, doc_id), detached_block_results)
+                    np.save(f"{args.result_folder}/{args.perturb_type}/{qid}_{doc_id}_block.npy", detached_block_results)
                     
 
                 # Patch attention heads
@@ -186,7 +198,7 @@ def run_experiment(args):
                         ranking_metric
                     )
                     detached_head_results = act_patch_attn_head_out_all_pos.detach().cpu().numpy()
-                    np.save("results/{}/{}_{}_head.npy".format(args.perturb_type, qid, doc_id), detached_head_results)
+                    np.save(f"{args.result_folder}/{args.perturb_type}/{qid}_{doc_id}_head.npy", detached_head_results)
 
                 # Patch heads by position
                 elif args.experiment_type == "head_pos":
@@ -200,33 +212,34 @@ def run_experiment(args):
                         layer_head_list
                     )
                     detached_head_pos_results = act_patch_attn_head_out_by_pos.detach().cpu().numpy()
-                    np.save("results_head_decomp/{}/{}_{}_head_by_pos.npy".format(args.perturb_type, qid, doc_id), detached_head_pos_results)
+                    np.save(f"{args.result_folder}_head_decomp/{args.perturb_type}/{qid}_{doc_id}_head_by_pos.npy", detached_head_pos_results)
 
                 elif args.experiment_type == "head_attn":
                     # Get attention patterns for head
                     attn_heads = [(0,9), (1,6), (2,3), (3,8)]
                     for layer, head in attn_heads:
                         attn_pattern = perturbed_cache["pattern", layer][:,head].mean(0).detach().cpu().numpy()
-                        np.save("results_attn_pattern/{}/{}_{}_{}_{}_attn_pattern.npy".format(args.perturb_type, qid, doc_id, layer, head), attn_pattern)
+                        np.save(f"{args.result_folder}_attn_pattern/{args.perturb_type}/{qid}_{doc_id}_{layer}_{head}_attn_pattern.npy", attn_pattern)
 
                 
                 elif args.experiment_type == "labels":
                     decoded_tokens = [tokenizer.decode(tok) for tok in batch["input_ids"][0]]
                     labels = ["{} {}".format(tok,i) for i, tok in enumerate(decoded_tokens)]
-                    with open("results/{}/{}_{}_labels.txt".format(args.perturb_type, qid, doc_id), "w", encoding='utf-8') as f:
+                    with open(f"{args.result_folder}/{args.perturb_type}/{qid}_{doc_id}_labels.txt", "w", encoding='utf-8') as f:
                         for item in labels:
                             f.write(str(item) + '\n')
 
 
             except Exception as e:
-                print("ERROR: {} for query {} and document {}".format(e, qid, doc_id))
+                print(f"ERROR: {e} for query {qid} and document {doc_id}")
 
 
     return
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run activation patching with the specific patching experiment and perturbation types.")
-    parser.add_argument("--experiment_type", default="head_attn", choices=["block", "head_all", "head_pos", "head_attn", "labels"], 
+    parser.add_argument("--dataset", default="TFC1-R", choices=["TFC1-I", "TFC1-R", "TFC2"])
+    parser.add_argument("--experiment_type", default="block", choices=["block", "head_all", "head_pos", "head_attn", "labels", "TFC1-R"], 
                         help="What will be patched (e.g., block).")
     parser.add_argument("--perturb_type", default="append", choices=["append", "prepend"], 
                         help="The perturbation to apply (e.g., append).")
@@ -236,6 +249,8 @@ if __name__ == "__main__":
                         help="Number of queries to use if using a reduced dataset.")
     parser.add_argument("--n_docs", type=int, default=1, 
                         help="Number of documents to use if using a reduced dataset.")
+    parser.add_argument("--result_folder", default="TFC1-R_results",  
+                        help="Where to store the results")
 
     args = parser.parse_args()
     
