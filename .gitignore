@@ -7,3 +7,10 @@ results/append
 results_attn_pattern/
 results_head_decomp/
 sketch.py
+new_results_head_decomp/
+new_results/
+all_results/
+TFC1-R_results/
+TFC1-R_results_attn_pattern/
+TFC1-R_results_head_decomp/
+backup_results/
