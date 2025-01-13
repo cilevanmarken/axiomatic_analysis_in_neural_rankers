@@ -91,10 +91,6 @@ def run_experiment(args):
     pre_trained_model_name = "sebastian-hofstaetter/distilbert-dot-tas_b-b256-msmarco"
     tokenizer, _, tl_model = load_tokenizer_and_models(pre_trained_model_name, device)
 
-    # Initialize results dataframe
-    # results_df = pd.DataFrame(columns=["qid", "doc_id", "og_score", "p_score", "score_diff", "percent_change", "og_rank", "p_rank", "change_in_rank"])
-    results_df = {}
-
     # Preprocess queries
     queries_dataloader = preprocess_queries(tfc1_add_queries, tokenizer)
 
@@ -183,22 +179,18 @@ def run_experiment(args):
                     patched_score = torch.matmul(q_embedding, patched_doc_embedding.t())
                     return (patched_score - og_score) / (p_score - og_score)
                 
-                # save intermediate results
-                # columns: qid,doc_id,og_score,p_score,score_diff,percent_change,og_rank,p_rank,change_in_rank
-                results_df[str(qid)+str(doc_id)] = {
-                    "qid": qid,
-                    "doc_id": doc_id,
-                    "og_score": baseline_score.item(),
-                    "p_score": perturbed_score.item(),
-                    "score_diff": perturbed_score.item() - baseline_score.item(),
-                    "percent_change": (perturbed_score.item() - baseline_score.item()) / baseline_score.item(),
-                    "og_rank": None,
-                    "p_rank": None,
-                    "change_in_rank": None
-                }
-                
                 # Patch after each layer (residual stream, attention, MLPs)
                 if args.experiment_type == "block":
+                    if args.dataset == "TFC2":
+                        result_file = f"{args.logging_folder}/results/{args.perturb_type}/{args.TFC2_K}/{qid}_{doc_id}_block.npy"
+                    else:
+                        result_file = f"{args.logging_folder}/results/{args.perturb_type}/{qid}_{doc_id}_block.npy"
+
+                    # skip if already computed
+                    if args.use_old and os.path.exists(result_file):
+                        print(f"Skipping {qid}_{doc_id}")
+                        continue
+
                     act_patch_block_every = get_act_patch_block_every(
                         tl_model,
                         device,
@@ -207,15 +199,21 @@ def run_experiment(args):
                         ranking_metric
                     )
                     detached_block_results = act_patch_block_every.detach().cpu().numpy()
-
-                    if args.dataset == "TFC2":
-                        np.save(f"{args.logging_folder}/results/{args.perturb_type}/{args.TFC2_K}/{qid}_{doc_id}_block.npy", detached_block_results)
-                    else:
-                        np.save(f"{args.logging_folder}/results/{args.perturb_type}/{qid}_{doc_id}_block.npy", detached_block_results)
+                    np.save(result_file, detached_block_results)
                     
 
                 # Patch attention heads
                 elif args.experiment_type == "head_all":
+                    if args.dataset == "TFC2":
+                        result_file = f"{args.logging_folder}/results_head_decomp/{args.perturb_type}/{args.TFC2_K}/{qid}_{doc_id}_head.npy"
+                    else:
+                        result_file = f"{args.logging_folder}/results_head_decomp/{args.perturb_type}/{qid}_{doc_id}_head.npy"
+
+                    # skip if already computed
+                    if args.use_old and os.path.exists(result_file):
+                        print(f"Skipping {qid}_{doc_id}")
+                        continue
+
                     act_patch_attn_head_out_all_pos = get_act_patch_attn_head_out_all_pos(
                         tl_model,
                         device,
@@ -224,15 +222,22 @@ def run_experiment(args):
                         ranking_metric
                     )
                     detached_head_results = act_patch_attn_head_out_all_pos.detach().cpu().numpy()
-
-                    if args.dataset == "TFC2":
-                        np.save(f"{args.logging_folder}/results_head_decomp/{args.perturb_type}/{args.TFC2_K}/{qid}_{doc_id}_head.npy", detached_head_results)
-                    else:
-                        np.save(f"{args.logging_folder}/{args.perturb_type}/{qid}_{doc_id}_head.npy", detached_head_results)
+                    np.save(result_file, detached_head_results)
 
 
                 # Patch heads by position
                 elif args.experiment_type == "head_pos":
+                    if args.dataset == "TFC2":
+                        raise NotImplementedError("TFC2 not implemented for head_attn, do not know which heads are important")
+                        result_file = f"{args.logging_folder}/results_head_decomp/{args.perturb_type}/{args.TFC2_K}/{qid}_{doc_id}_head_by_pos.npy"
+                    else:
+                        result_file = f"{args.logging_folder}/results_head_decomp/{args.perturb_type}/{qid}_{doc_id}_head_by_pos.npy"
+
+                    # skip if already computed
+                    if args.use_old and os.path.exists(result_file):
+                        print(f"Skipping {qid}_{doc_id}")
+                        continue
+
                     layer_head_list = [(0,9), (1,6), (2,3), (3,8)]
                     act_patch_attn_head_out_by_pos = get_act_patch_attn_head_by_pos(
                         tl_model,
@@ -243,23 +248,20 @@ def run_experiment(args):
                         layer_head_list
                     )
                     detached_head_pos_results = act_patch_attn_head_out_by_pos.detach().cpu().numpy()
-
-                    if args.dataset == "TFC2":
-                        np.save(f"{args.logging_folder}/results_head_decomp/{args.perturb_type}/{args.TFC2_K}/{qid}_{doc_id}_head_by_pos.npy", detached_head_pos_results)
-                    else:
-                        np.save(f"{args.logging_folder}_head_decomp/{args.perturb_type}/{qid}_{doc_id}_head_by_pos.npy", detached_head_pos_results)
+                    np.save(result_file, detached_head_pos_results)
 
 
+                # Get attention patterns for head
                 elif args.experiment_type == "head_attn":
-                    # Get attention patterns for head
                     attn_heads = [(0,9), (1,6), (2,3), (3,8)]
                     for layer, head in attn_heads:
                         attn_pattern = perturbed_cache["pattern", layer][:,head].mean(0).detach().cpu().numpy()
 
                         if args.dataset == "TFC2":
+                            raise NotImplementedError("TFC2 not implemented for head_attn, do not know which heads are important")
                             np.save(f"{args.logging_folder}/results_attn_pattern/{args.perturb_type}/{args.TFC2_K}/{qid}_{doc_id}_{layer}_{head}_attn_pattern.npy", attn_pattern)
                         else:
-                            np.save(f"{args.logging_folder}_attn_pattern/{args.perturb_type}/{qid}_{doc_id}_{layer}_{head}_attn_pattern.npy", attn_pattern)
+                            np.save(f"{args.logging_folder}/results_attn_pattern/{args.perturb_type}/{qid}_{doc_id}_{layer}_{head}_attn_pattern.npy", attn_pattern)
 
                 
                 elif args.experiment_type == "labels":
@@ -293,14 +295,19 @@ if __name__ == "__main__":
                         help="What will be patched (e.g., block).")
     parser.add_argument("--perturb_type", default="append", choices=["append", "prepend"], 
                         help="The perturbation to apply (e.g., append).")
+    parser.add_argument("--TFC2_K", default=1, type=int, choices=[1, 2, 5, 10, 50, 100], help="K")
+    
+    # reduced dataset
     parser.add_argument("--reduced_dataset", default=True, action='store_true',
                         help="Whether to use a reduced dataset.")
     parser.add_argument("--n_queries", type=int, default=1, 
                         help="Number of queries to use if using a reduced dataset.")
     parser.add_argument("--n_docs", type=int, default=1, 
                         help="Number of documents to use if using a reduced dataset.")
+    
+    # reproducibility
     parser.add_argument("--seed", default=42, type=int, help="Random seed.")
-    parser.add_argument("--TFC2_K", default=1, type=int, choices=[1, 2, 5, 10, 50, 100], help="K")
+    parser.add_argument("--use_old", default=False, action='store_true', help="Do not overwrite already computed files.")
 
     args = parser.parse_args()
 
