@@ -1,5 +1,6 @@
 # these folders can be ignored
 data/
+figures/
 results/
 result_figures/
 results/prepend
