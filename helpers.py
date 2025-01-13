@@ -136,7 +136,7 @@ def create_df_from_nested_dict(nested_dict):
         combinations = list(product(outer_ids, inner_ids))
         
         # Create DataFrame with combinations
-        df = pd.DataFrame(combinations, columns=['qid', 'doc_id'])
+        df = pd.DataFrame(combinations, columns=['qid', 'doc_id'], dtype=str)
         
         # Add empty columns for future scoring
         score_columns = [

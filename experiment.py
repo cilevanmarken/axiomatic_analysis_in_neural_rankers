@@ -14,6 +14,7 @@ from functools import partial
 import transformer_lens.utils as utils
 from transformer_lens import patching
 from jaxtyping import Float
+from itertools import product
 
 from helpers import (
     load_json_file,
@@ -22,7 +23,8 @@ from helpers import (
     preprocess_corpus,
     encode_hf,
     encode_tl,
-    compute_ranking_scores
+    compute_ranking_scores,
+    create_df_from_nested_dict
 )
 
 from patching_helpers import (
@@ -90,6 +92,9 @@ def run_experiment(args):
 
     pre_trained_model_name = "sebastian-hofstaetter/distilbert-dot-tas_b-b256-msmarco"
     tokenizer, _, tl_model = load_tokenizer_and_models(pre_trained_model_name, device)
+
+    # create pd dataframe from nested dict
+    computed_results = create_df_from_nested_dict(tfc1_add_baseline_corpus)
 
     # Preprocess queries
     queries_dataloader = preprocess_queries(tfc1_add_queries, tokenizer)
@@ -170,6 +175,13 @@ def run_experiment(args):
                 # NOTE: this is precomputed, 
                 # perturbed_score = torch.tensor(tfc1_precomputed_scores[(tfc1_precomputed_scores["qid"] == qid) & (tfc1_precomputed_scores["doc_id"] == int(doc_id))]["p_score"].item())
                 perturbed_score = torch.matmul(q_embedding, perturbed_embedding.t())
+
+                # save these scores
+                mask = (computed_results['qid'] == str(qid)) & (computed_results['doc_id'] == str(doc_id))
+                computed_results.loc[mask, "og_score"] = baseline_score.item()
+                computed_results.loc[mask, "p_score"] = perturbed_score.item()
+                computed_results.loc[mask, "score_diff"] = perturbed_score.item() - baseline_score.item()
+                computed_results.loc[mask, "percent_change"] = (perturbed_score.item() - baseline_score.item()) / baseline_score.item()
 
                 '''
                 Linear function of score diff, calibrated so that it equals 0 when performance is 
@@ -281,10 +293,24 @@ def run_experiment(args):
             except Exception as e:
                 print(f"ERROR: {e} for query {qid} and document {doc_id}")
 
-    # # save results dict as txt file
-    # with open(f"{args.logging_folder}/results/{args.perturb_type}/{args.experiment_type}_results.txt", "w") as f:
-    #     f.write(str(results_df))
+    # compute results and save
+    computed_results['og_rank'] = computed_results.groupby('qid')['og_score'].rank(
+        method='min',  # Use minimum rank for ties
+        ascending=False,  # Higher scores get lower ranks (rank 1 is best)
+        na_option='bottom'  # Put NaN values at the bottom
+    )
+    computed_results['p_rank'] = computed_results.groupby('qid')['p_score'].rank(
+        method='min',  # Use minimum rank for ties
+        ascending=False,  # Higher scores get lower ranks (rank 1 is best)
+        na_option='bottom'  # Put NaN values at the bottom
+    )
+    computed_results['rank_diff'] = computed_results['og_rank'] - computed_results['p_rank']
 
+    # save
+    if args.dataset == "TFC2":
+        computed_results.to_csv(f"{args.logging_folder}/results/{args.perturb_type}/{args.TFC2_K}/computed_results.csv", index=False)
+    else:
+        computed_results.to_csv(f"{args.logging_folder}/results/{args.perturb_type}/computed_results.csv", index=False)
 
     return
 
@@ -302,7 +328,7 @@ if __name__ == "__main__":
                         help="Whether to use a reduced dataset.")
     parser.add_argument("--n_queries", type=int, default=1, 
                         help="Number of queries to use if using a reduced dataset.")
-    parser.add_argument("--n_docs", type=int, default=1, 
+    parser.add_argument("--n_docs", type=int, default=5, 
                         help="Number of documents to use if using a reduced dataset.")
     
     # reproducibility
