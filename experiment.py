@@ -50,19 +50,32 @@ def run_experiment(args):
     device = utils.get_device()
     print("Device:", device)
 
-    # Load queries and docs from files
-    fbase_path = f"data/{args.dataset}"
+    # set seed
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+
+    # create folder structure to save results
+    os.makedirs(f"{args.logging_folder}/results/{args.perturb_type}", exist_ok=True)
+    os.makedirs(f"{args.logging_folder}/results_head_decomp/{args.perturb_type}", exist_ok=True)
+    os.makedirs(f"{args.logging_folder}/results_attn_pattern/{args.perturb_type}", exist_ok=True)
+
+    if args.dataset == "TFC2":
+        os.makedirs(f"{args.logging_folder}/results/{args.perturb_type}/{args.TFC2_K}", exist_ok=True)
+        os.makedirs(f"{args.logging_folder}/results_head_decomp/{args.perturb_type}/{args.TFC2_K}", exist_ok=True)
+        os.makedirs(f"{args.logging_folder}/results_attn_pattern/{args.perturb_type}/{args.TFC2_K}", exist_ok=True)
 
     # Load files
     if args.dataset == "TFC1-I":
-        baseline_path = os.path.join(fbase_path, f"TFC1-I_{args.perturb_type}_baseline.json")
-        perturbed_path = os.path.join(fbase_path, f"TFC1-I_{args.perturb_type}_corpus.json")
+        baseline_path = f"data/{args.dataset}/TFC1-I_{args.perturb_type}_baseline.json"
+        perturbed_path = f"data/{args.dataset}/TFC1-I_{args.perturb_type}_corpus.json"
     elif args.dataset == "TFC1-R":
         # baseline is expected to rank higher, so we use the reverse
-        baseline_path = os.path.join(fbase_path, "TFC1-R_corpus.json")
-        perturbed_path = os.path.join(fbase_path, "TFC1-R_baseline.json")
+        baseline_path = f"data/{args.dataset}/TFC1-R_corpus.json"
+        perturbed_path = f"data/{args.dataset}/TFC1-R_baseline.json"
     elif args.dataset == "TFC2":
-        raise NotImplementedError("TFC2 not implemented yet.")
+        baseline_path = f"data/{args.dataset}/TFC2_{args.TFC2_K}_baseline.json"
+        perturbed_path = f"data/{args.dataset}/TFC2_{args.TFC2_K}_corpus.json"
     
     # tfc1_precomputed_scores = pd.read_csv(os.path.join(fbase_path, "tfc1_add_{}_target_qids_scores.csv".format(args.perturb_type)))
     tfc1_add_queries = pd.read_csv(os.path.join("data", "QIDs_with_text.csv"), header=None, names=["_id", "text"])
@@ -77,6 +90,10 @@ def run_experiment(args):
 
     pre_trained_model_name = "sebastian-hofstaetter/distilbert-dot-tas_b-b256-msmarco"
     tokenizer, _, tl_model = load_tokenizer_and_models(pre_trained_model_name, device)
+
+    # Initialize results dataframe
+    # results_df = pd.DataFrame(columns=["qid", "doc_id", "og_score", "p_score", "score_diff", "percent_change", "og_rank", "p_rank", "change_in_rank"])
+    results_df = {}
 
     # Preprocess queries
     queries_dataloader = preprocess_queries(tfc1_add_queries, tokenizer)
@@ -165,15 +182,20 @@ def run_experiment(args):
                 def ranking_metric(patched_doc_embedding, og_score=baseline_score, p_score=perturbed_score):
                     patched_score = torch.matmul(q_embedding, patched_doc_embedding.t())
                     return (patched_score - og_score) / (p_score - og_score)
-
-
-                # Setup directories to save results
-                os.makedirs(f"{args.result_folder}", exist_ok=True)
-                os.makedirs(f"{args.result_folder}/{args.perturb_type}", exist_ok=True)
-                os.makedirs(f"{args.result_folder}_head_decomp", exist_ok=True)
-                os.makedirs(f"{args.result_folder}_head_decomp/{args.perturb_type}", exist_ok=True)
-                os.makedirs(f"{args.result_folder}_attn_pattern/{args.perturb_type}", exist_ok=True)
-
+                
+                # save intermediate results
+                # columns: qid,doc_id,og_score,p_score,score_diff,percent_change,og_rank,p_rank,change_in_rank
+                results_df[str(qid)+str(doc_id)] = {
+                    "qid": qid,
+                    "doc_id": doc_id,
+                    "og_score": baseline_score.item(),
+                    "p_score": perturbed_score.item(),
+                    "score_diff": perturbed_score.item() - baseline_score.item(),
+                    "percent_change": (perturbed_score.item() - baseline_score.item()) / baseline_score.item(),
+                    "og_rank": None,
+                    "p_rank": None,
+                    "change_in_rank": None
+                }
                 
                 # Patch after each layer (residual stream, attention, MLPs)
                 if args.experiment_type == "block":
@@ -185,7 +207,11 @@ def run_experiment(args):
                         ranking_metric
                     )
                     detached_block_results = act_patch_block_every.detach().cpu().numpy()
-                    np.save(f"{args.result_folder}/{args.perturb_type}/{qid}_{doc_id}_block.npy", detached_block_results)
+
+                    if args.dataset == "TFC2":
+                        np.save(f"{args.logging_folder}/results/{args.perturb_type}/{args.TFC2_K}/{qid}_{doc_id}_block.npy", detached_block_results)
+                    else:
+                        np.save(f"{args.logging_folder}/results/{args.perturb_type}/{qid}_{doc_id}_block.npy", detached_block_results)
                     
 
                 # Patch attention heads
@@ -198,7 +224,12 @@ def run_experiment(args):
                         ranking_metric
                     )
                     detached_head_results = act_patch_attn_head_out_all_pos.detach().cpu().numpy()
-                    np.save(f"{args.result_folder}/{args.perturb_type}/{qid}_{doc_id}_head.npy", detached_head_results)
+
+                    if args.dataset == "TFC2":
+                        np.save(f"{args.logging_folder}/results_head_decomp/{args.perturb_type}/{args.TFC2_K}/{qid}_{doc_id}_head.npy", detached_head_results)
+                    else:
+                        np.save(f"{args.logging_folder}/{args.perturb_type}/{qid}_{doc_id}_head.npy", detached_head_results)
+
 
                 # Patch heads by position
                 elif args.experiment_type == "head_pos":
@@ -212,46 +243,67 @@ def run_experiment(args):
                         layer_head_list
                     )
                     detached_head_pos_results = act_patch_attn_head_out_by_pos.detach().cpu().numpy()
-                    np.save(f"{args.result_folder}_head_decomp/{args.perturb_type}/{qid}_{doc_id}_head_by_pos.npy", detached_head_pos_results)
+
+                    if args.dataset == "TFC2":
+                        np.save(f"{args.logging_folder}/results_head_decomp/{args.perturb_type}/{args.TFC2_K}/{qid}_{doc_id}_head_by_pos.npy", detached_head_pos_results)
+                    else:
+                        np.save(f"{args.logging_folder}_head_decomp/{args.perturb_type}/{qid}_{doc_id}_head_by_pos.npy", detached_head_pos_results)
+
 
                 elif args.experiment_type == "head_attn":
                     # Get attention patterns for head
                     attn_heads = [(0,9), (1,6), (2,3), (3,8)]
                     for layer, head in attn_heads:
                         attn_pattern = perturbed_cache["pattern", layer][:,head].mean(0).detach().cpu().numpy()
-                        np.save(f"{args.result_folder}_attn_pattern/{args.perturb_type}/{qid}_{doc_id}_{layer}_{head}_attn_pattern.npy", attn_pattern)
+
+                        if args.dataset == "TFC2":
+                            np.save(f"{args.logging_folder}/results_attn_pattern/{args.perturb_type}/{args.TFC2_K}/{qid}_{doc_id}_{layer}_{head}_attn_pattern.npy", attn_pattern)
+                        else:
+                            np.save(f"{args.logging_folder}_attn_pattern/{args.perturb_type}/{qid}_{doc_id}_{layer}_{head}_attn_pattern.npy", attn_pattern)
 
                 
                 elif args.experiment_type == "labels":
                     decoded_tokens = [tokenizer.decode(tok) for tok in batch["input_ids"][0]]
                     labels = ["{} {}".format(tok,i) for i, tok in enumerate(decoded_tokens)]
-                    with open(f"{args.result_folder}/{args.perturb_type}/{qid}_{doc_id}_labels.txt", "w", encoding='utf-8') as f:
-                        for item in labels:
-                            f.write(str(item) + '\n')
+
+                    if args.dataset == "TFC2":
+                        with open(f"{args.logging_folder}/results/{args.perturb_type}/{args.TFC2_K}/{qid}_{doc_id}_labels.txt", "w", encoding='utf-8') as f:
+                            for item in labels:
+                                f.write(str(item) + '\n')
+                    else:
+                        with open(f"{args.logging_folder}/{args.perturb_type}/{qid}_{doc_id}_labels.txt", "w", encoding='utf-8') as f:
+                            for item in labels:
+                                f.write(str(item) + '\n')
 
 
             except Exception as e:
                 print(f"ERROR: {e} for query {qid} and document {doc_id}")
+
+    # # save results dict as txt file
+    # with open(f"{args.logging_folder}/results/{args.perturb_type}/{args.experiment_type}_results.txt", "w") as f:
+    #     f.write(str(results_df))
 
 
     return
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run activation patching with the specific patching experiment and perturbation types.")
-    parser.add_argument("--dataset", default="TFC1-R", choices=["TFC1-I", "TFC1-R", "TFC2"])
+    parser.add_argument("--dataset", default="TFC2", choices=["TFC1-I", "TFC1-R", "TFC2"])
     parser.add_argument("--experiment_type", default="block", choices=["block", "head_all", "head_pos", "head_attn", "labels", "TFC1-R"], 
                         help="What will be patched (e.g., block).")
     parser.add_argument("--perturb_type", default="append", choices=["append", "prepend"], 
                         help="The perturbation to apply (e.g., append).")
-    parser.add_argument("--reduced_dataset", default=False, action='store_true',
+    parser.add_argument("--reduced_dataset", default=True, action='store_true',
                         help="Whether to use a reduced dataset.")
     parser.add_argument("--n_queries", type=int, default=1, 
                         help="Number of queries to use if using a reduced dataset.")
     parser.add_argument("--n_docs", type=int, default=1, 
                         help="Number of documents to use if using a reduced dataset.")
-    parser.add_argument("--result_folder", default="TFC1-R_results",  
-                        help="Where to store the results")
+    parser.add_argument("--seed", default=42, type=int, help="Random seed.")
+    parser.add_argument("--TFC2_K", default=1, type=int, choices=[1, 2, 5, 10, 50, 100], help="K")
 
     args = parser.parse_args()
+
+    args.logging_folder = f"./results/{args.dataset}"
     
     _ = run_experiment(args)
