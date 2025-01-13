@@ -55,6 +55,7 @@ def save_dataset_as_dict(corpus):
         title = row['title']
         text = row['text']
         query_term_orignal_ct = row['query_term_orignal_ct']
+        query_term = row['query_term']
 
         if query_id not in corpus_dict:
             corpus_dict[query_id] = {}
@@ -63,6 +64,7 @@ def save_dataset_as_dict(corpus):
             'title': title,
             'text': text,
             'query_term_orignal_ct': query_term_orignal_ct,
+            'query_term': query_term,
         }
 
     return corpus_dict
@@ -79,6 +81,9 @@ def save_dataset(corpus, baseline_corpus, args, **kwargs):
     elif args.experiment == 'TFC2':
         perturbed_path = f'data/{args.experiment}/{args.experiment}_{kwargs["K"]}_corpus.json'
         baseline_path = f'data/{args.experiment}/{args.experiment}_{kwargs["K"]}_baseline.json'
+    else:
+        perturbed_path = f'data/{args.experiment}/{args.experiment}_corpus.json'
+        baseline_path = f'data/{args.experiment}/{args.experiment}_baseline.json'
 
     with open(perturbed_path, 'w') as f:
         json.dump({'corpus': corpus_dict}, f, indent=4)
@@ -89,19 +94,21 @@ def save_dataset(corpus, baseline_corpus, args, **kwargs):
 
 
 def perturb_dataset(args):
-
+  
     # convert to a pandas df
     baseline_corpus_df = load_json_to_df('data/baseline.json')
 
     # load queries
     queries = pd.read_csv('data/QIDs_with_text.csv', header=None, names=['query_id', 'query_text'], dtype={'query_id': str, 'query_text': str})
 
-    # merge queries with corpus
-    corpus = baseline_corpus_df.merge(queries, left_on='query_id', right_on='query_id', how='left')
-    baseline_corpus = corpus.copy()
+    # load randomly sampled query terms
+    query_term = pd.read_csv('data/selected_query_terms.csv', header=None, names=['query_id', 'query_term'], dtype={'query_id': str, 'query_term': str})
 
-    # randomly sample a word from column query_text
-    corpus['query_term'] = corpus['query_text'].apply(sample_word)
+    # merge queries with corpus
+    queries = pd.merge(queries, query_term, left_on='query_id', right_on='query_id', how='left')
+    corpus = baseline_corpus_df.merge(queries, left_on='query_id', right_on='query_id', how='left')
+    print(f'Loaded {len(corpus)} documents., Columns are {corpus.columns}')
+    baseline_corpus = corpus.copy()
 
     # TFC1-I: append or prepend query term
     if args.experiment == 'TFC1-I':
@@ -163,7 +170,7 @@ def perturb_dataset(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run activation patching with the specific patching experiment and perturbation types.")
-    parser.add_argument("--experiment", default="TFC2", choices=["TFC1-I", "TFC1-R", "TFC2", "baseline"], 
+    parser.add_argument("--experiment", default="TFC2", choices=["TFC1-I", "TFC1-R", "TFC2"], 
                         help="The perturbation to apply (e.g., append).")
     parser.add_argument("--TFC1-I", default="append", choices=["append", "prepend"],
                         help="Wether to add the query term at the beginning or end of the text.")
