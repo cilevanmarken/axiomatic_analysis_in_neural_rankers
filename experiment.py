@@ -15,6 +15,7 @@ import transformer_lens.utils as utils
 from transformer_lens import patching
 from jaxtyping import Float
 from itertools import product
+from datetime import datetime
 
 from helpers import (
     load_json_file,
@@ -94,7 +95,8 @@ def run_experiment(args):
     tokenizer, _, tl_model = load_tokenizer_and_models(pre_trained_model_name, device)
 
     # create pd dataframe from nested dict
-    computed_results = create_df_from_nested_dict(tfc1_add_baseline_corpus)
+    if not args.skip_already_computed:
+        computed_results = create_df_from_nested_dict(tfc1_add_baseline_corpus)
 
     # Preprocess queries
     queries_dataloader = preprocess_queries(tfc1_add_queries, tokenizer)
@@ -199,7 +201,7 @@ def run_experiment(args):
                         result_file = f"{args.logging_folder}/results/{args.perturb_type}/{qid}_{doc_id}_block.npy"
 
                     # skip if already computed
-                    if args.use_old and os.path.exists(result_file):
+                    if args.skip_already_computed and os.path.exists(result_file):
                         print(f"Skipping {qid}_{doc_id}")
                         continue
 
@@ -211,7 +213,7 @@ def run_experiment(args):
                         ranking_metric
                     )
                     detached_block_results = act_patch_block_every.detach().cpu().numpy()
-                    np.save(result_file, detached_block_results)
+                    if args.save: np.save(result_file, detached_block_results)
                     
 
                 # Patch attention heads
@@ -222,7 +224,7 @@ def run_experiment(args):
                         result_file = f"{args.logging_folder}/results_head_decomp/{args.perturb_type}/{qid}_{doc_id}_head.npy"
 
                     # skip if already computed
-                    if args.use_old and os.path.exists(result_file):
+                    if args.skip_already_computed and os.path.exists(result_file):
                         print(f"Skipping {qid}_{doc_id}")
                         continue
 
@@ -234,7 +236,7 @@ def run_experiment(args):
                         ranking_metric
                     )
                     detached_head_results = act_patch_attn_head_out_all_pos.detach().cpu().numpy()
-                    np.save(result_file, detached_head_results)
+                    if args.save: np.save(result_file, detached_head_results)
 
 
                 # Patch heads by position
@@ -246,7 +248,7 @@ def run_experiment(args):
                         result_file = f"{args.logging_folder}/results_head_decomp/{args.perturb_type}/{qid}_{doc_id}_head_by_pos.npy"
 
                     # skip if already computed
-                    if args.use_old and os.path.exists(result_file):
+                    if args.skip_already_computed and os.path.exists(result_file):
                         print(f"Skipping {qid}_{doc_id}")
                         continue
 
@@ -260,7 +262,7 @@ def run_experiment(args):
                         layer_head_list
                     )
                     detached_head_pos_results = act_patch_attn_head_out_by_pos.detach().cpu().numpy()
-                    np.save(result_file, detached_head_pos_results)
+                    if args.save: np.save(result_file, detached_head_pos_results)
 
 
                 # Get attention patterns for head
@@ -271,23 +273,24 @@ def run_experiment(args):
 
                         if args.dataset == "TFC2":
                             raise NotImplementedError("TFC2 not implemented for head_attn, do not know which heads are important")
-                            np.save(f"{args.logging_folder}/results_attn_pattern/{args.perturb_type}/{args.TFC2_K}/{qid}_{doc_id}_{layer}_{head}_attn_pattern.npy", attn_pattern)
+                            if args.save: np.save(f"{args.logging_folder}/results_attn_pattern/{args.perturb_type}/{args.TFC2_K}/{qid}_{doc_id}_{layer}_{head}_attn_pattern.npy", attn_pattern)
                         else:
-                            np.save(f"{args.logging_folder}/results_attn_pattern/{args.perturb_type}/{qid}_{doc_id}_{layer}_{head}_attn_pattern.npy", attn_pattern)
+                            if args.save: np.save(f"{args.logging_folder}/results_attn_pattern/{args.perturb_type}/{qid}_{doc_id}_{layer}_{head}_attn_pattern.npy", attn_pattern)
 
                 
                 elif args.experiment_type == "labels":
                     decoded_tokens = [tokenizer.decode(tok) for tok in batch["input_ids"][0]]
                     labels = ["{} {}".format(tok,i) for i, tok in enumerate(decoded_tokens)]
 
-                    if args.dataset == "TFC2":
-                        with open(f"{args.logging_folder}/results/{args.perturb_type}/{args.TFC2_K}/{qid}_{doc_id}_labels.txt", "w", encoding='utf-8') as f:
-                            for item in labels:
-                                f.write(str(item) + '\n')
-                    else:
-                        with open(f"{args.logging_folder}/{args.perturb_type}/{qid}_{doc_id}_labels.txt", "w", encoding='utf-8') as f:
-                            for item in labels:
-                                f.write(str(item) + '\n')
+                    if args.save: 
+                        if args.dataset == "TFC2":
+                            with open(f"{args.logging_folder}/results/{args.perturb_type}/{args.TFC2_K}/{qid}_{doc_id}_labels.txt", "w", encoding='utf-8') as f:
+                                for item in labels:
+                                    f.write(str(item) + '\n')
+                        else:
+                            with open(f"{args.logging_folder}/{args.perturb_type}/{qid}_{doc_id}_labels.txt", "w", encoding='utf-8') as f:
+                                for item in labels:
+                                    f.write(str(item) + '\n')
 
 
             except Exception as e:
@@ -307,16 +310,17 @@ def run_experiment(args):
     computed_results['rank_diff'] = computed_results['og_rank'] - computed_results['p_rank']
 
     # save
-    if args.dataset == "TFC2":
-        computed_results.to_csv(f"{args.logging_folder}/results/{args.perturb_type}/{args.TFC2_K}/computed_results.csv", index=False)
+    # add date to end of file
+    if args.dataset == "TFC2" and args.save:
+        computed_results.to_csv(f"{args.logging_folder}/results/{args.perturb_type}/{args.TFC2_K}/computed_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", index=False)
     else:
-        computed_results.to_csv(f"{args.logging_folder}/results/{args.perturb_type}/computed_results.csv", index=False)
+        computed_results.to_csv(f"{args.logging_folder}/results/{args.perturb_type}/computed_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", index=False)
 
     return
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run activation patching with the specific patching experiment and perturbation types.")
-    parser.add_argument("--dataset", default="TFC2", choices=["TFC1-I", "TFC1-R", "TFC2"])
+    parser.add_argument("--dataset", default="TFC1-I", choices=["TFC1-I", "TFC1-R", "TFC2"])
     parser.add_argument("--experiment_type", default="block", choices=["block", "head_all", "head_pos", "head_attn", "labels", "TFC1-R"], 
                         help="What will be patched (e.g., block).")
     parser.add_argument("--perturb_type", default="append", choices=["append", "prepend"], 
@@ -333,7 +337,8 @@ if __name__ == "__main__":
     
     # reproducibility
     parser.add_argument("--seed", default=42, type=int, help="Random seed.")
-    parser.add_argument("--use_old", default=False, action='store_true', help="Do not overwrite already computed files.")
+    parser.add_argument("--skip_already_computed", default=False, action='store_true', help="Do not overwrite already computed files and do not recompute results.")
+    parser.add_argument("--save", default=False, help="Save results.")
 
     args = parser.parse_args()
 
