@@ -160,7 +160,7 @@ def perturb_dataset(args):
                 text = row['text'] + ' '
                 query_term = row['query_term']
                 perturbed_text = text + ' '.join([query_term]*(K + 1))
-                baseline_perturbed_text = text + ' '.join([query_term]*K)
+                baseline_perturbed_text = text + ' '.join([query_term]*K) + ' ' + FILLER
 
                 TFC2_corpus.at[i, 'text'] = perturbed_text
                 TFC2_baseline_corpus.at[i, 'text'] = baseline_perturbed_text
