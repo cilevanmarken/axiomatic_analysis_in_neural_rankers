@@ -7,8 +7,8 @@ import json
 from transformers import AutoTokenizer, AutoModel
 from datasets import Value, Dataset
 from torch.utils.data import DataLoader
-
 from transformer_lens import HookedEncoder
+from itertools import product
 
 
 # Function to load JSON file into a Python dictionary
@@ -119,3 +119,41 @@ def compute_ranking_scores(query_embedding, doc_embeddings, doc_ids):
     sorted_idx = np.argsort(scores)[::-1]
 
     return scores[sorted_idx], doc_ids[sorted_idx].astype(int)
+
+
+def create_df_from_nested_dict(nested_dict):
+    try:
+        # create pd dataframe from nested dict
+        outer_ids = list(nested_dict.keys())
+            
+        # Extract all inner IDs (document IDs) from all documents
+        inner_ids = set()  # Using set to avoid duplicates
+        for outer_dict in nested_dict.values():
+            inner_ids.update(outer_dict.keys())
+        inner_ids = list(inner_ids)
+        
+        # Create all combinations using itertools.product
+        combinations = list(product(outer_ids, inner_ids))
+        
+        # Create DataFrame with combinations
+        df = pd.DataFrame(combinations, columns=['qid', 'doc_id'])
+        
+        # Add empty columns for future scoring
+        score_columns = [
+            'og_score', 'p_score', 'score_diff',
+            'percent_change', 'og_rank', 'p_rank', 'change_in_rank'
+        ]
+        
+        for col in score_columns:
+            df[col] = pd.NA
+
+        # check that there are no duplicates
+        if df.duplicated().sum() > 0:
+            print("Duplicates found in the combinations DataFrame")
+            return None
+        
+        return df
+
+    except Exception as e:
+        print(f"Error creating combinations DataFrame: {str(e)}")
+        return None
