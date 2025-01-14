@@ -123,20 +123,14 @@ def compute_ranking_scores(query_embedding, doc_embeddings, doc_ids):
 
 def create_df_from_nested_dict(nested_dict):
     try:
-        # create pd dataframe from nested dict
-        outer_ids = list(nested_dict.keys())
-            
-        # Extract all inner IDs (document IDs) from all documents
-        inner_ids = set()  # Using set to avoid duplicates
-        for outer_dict in nested_dict.values():
-            inner_ids.update(outer_dict.keys())
-        inner_ids = list(inner_ids)
+        combinations = []
+
+        for outer_id, inner_dict in nested_dict.items():
+            inner_ids = list(set(inner_dict.keys()))
+            combinations.extend(list(product([outer_id], inner_ids)))
         
-        # Create all combinations using itertools.product
-        combinations = list(product(outer_ids, inner_ids))
-        
-        # Create DataFrame with combinations
         df = pd.DataFrame(combinations, columns=['qid', 'doc_id'], dtype=str)
+        df.sort_values(by=['qid', 'doc_id'], inplace=True)
         
         # Add empty columns for future scoring
         score_columns = [
@@ -146,11 +140,6 @@ def create_df_from_nested_dict(nested_dict):
         
         for col in score_columns:
             df[col] = pd.NA
-
-        # check that there are no duplicates
-        if df.duplicated().sum() > 0:
-            print("Duplicates found in the combinations DataFrame")
-            return None
         
         return df
 

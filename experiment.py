@@ -95,15 +95,19 @@ def run_experiment(args):
     tokenizer, _, tl_model = load_tokenizer_and_models(pre_trained_model_name, device)
 
     # create pd dataframe from nested dict
-    if not args.skip_already_computed:
-        computed_results = create_df_from_nested_dict(tfc1_add_baseline_corpus)
+    if args.skip_already_computed:
+        if args.dataset == "TFC2":
+            computed_results = pd.read_csv(f"data/{args.dataset}/computed_results_{args.perturb_type}_{args.TFC2_K}.csv")
+        else:
+            computed_results = pd.read_csv(f"data/{args.dataset}/computed_results_{args.perturb_type}.csv")
+    else:
+        computed_results = create_df_from_nested_dict(tfc1_add_dd_corpus)
 
     # Preprocess queries
     queries_dataloader = preprocess_queries(tfc1_add_queries, tokenizer)
 
     # Loop through each query and run activation patching
     for i, qid in enumerate(tqdm(target_qids)):
-        print("QID at:", i)
 
         # Get query embedding
         q_tokenized = list(filter(lambda item: item["_id"] == qid, queries_dataloader))[0]
@@ -123,8 +127,16 @@ def run_experiment(args):
 
         # batch size = 1 doc
         for j, batch in enumerate(corpus_dataloader):
-            print("DOC AT:", j)
+            print(f"QUERY @ {i}, DOC @ {j}")
             try:
+
+                # skip if already computed
+                if args.skip_already_computed:
+                    mask = (computed_results['qid'] == str(qid)) & (computed_results['doc_id'] == str(batch["_id"][0]))
+                    if not computed_results[mask].empty:
+                        print(f"Skipping query {qid} and doc {batch['_id'][0]}")
+                        continue
+
                 # Get baseline doc
                 doc_id = batch["_id"][0]
                 baseline_doc = tfc1_add_baseline_corpus[str(qid)][doc_id]["text"]
@@ -310,14 +322,14 @@ def run_experiment(args):
         ascending=False,  # Higher scores get lower ranks (rank 1 is best)
         na_option='bottom'  # Put NaN values at the bottom
     )
-    computed_results['rank_diff'] = computed_results['og_rank'] - computed_results['p_rank']
+    computed_results['change_in_rank'] = computed_results['og_rank'] - computed_results['p_rank']
 
     # save
     # add date to end of file
     if args.dataset == "TFC2" and args.save:
-        computed_results.to_csv(f"{args.logging_folder}/results/{args.perturb_type}/{args.TFC2_K}/computed_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", index=False)
+        computed_results.to_csv(f"data/{args.dataset}/computed_results_{args.perturb_type}_{args.TFC2_K}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", index=False)
     else:
-        computed_results.to_csv(f"{args.logging_folder}/results/{args.perturb_type}/computed_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", index=False)
+        computed_results.to_csv(f"data/{args.dataset}/results/{args.perturb_type}/computed_results_{args.perturb_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", index=False)
 
     return
 
@@ -331,11 +343,11 @@ if __name__ == "__main__":
     parser.add_argument("--TFC2_K", default=1, type=int, choices=[1, 2, 5, 10, 50], help="K")
     
     # reduced dataset
-    parser.add_argument("--reduced_dataset", default=False, action='store_true',
+    parser.add_argument("--reduced_dataset", default=True, action='store_true',
                         help="Whether to use a reduced dataset.")
     parser.add_argument("--n_queries", type=int, default=1, 
                         help="Number of queries to use if using a reduced dataset.")
-    parser.add_argument("--n_docs", type=int, default=5, 
+    parser.add_argument("--n_docs", type=int, default=4, 
                         help="Number of documents to use if using a reduced dataset.")
     
     # reproducibility
