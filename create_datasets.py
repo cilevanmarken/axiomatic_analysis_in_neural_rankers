@@ -35,14 +35,15 @@ def load_json_to_df(file_path):
     df = pd.DataFrame(flattened_data)
     return df
 
-def sample_word(text):
-    words = text.split()
+# NOTE: outdated, words were already sampled
+# def sample_word(text):
+#     words = text.split()
 
-    # # preprocess words
-    # words = [word.strip().lower() for word in words]
-    # words = [word.translate(str.maketrans('', '', string.punctuation)) for word in words]
+#     # # preprocess words
+#     # words = [word.strip().lower() for word in words]
+#     # words = [word.translate(str.maketrans('', '', string.punctuation)) for word in words]
 
-    return random.choice(words)
+#     return random.choice(words)
 
 
 def save_dataset_as_dict(corpus):
@@ -159,8 +160,8 @@ def perturb_dataset(args):
             for i, row in TFC2_corpus.iterrows():
                 text = row['text'] + ' '
                 query_term = row['query_term']
-                perturbed_text = text + ' '.join([query_term]*(K + 1))
-                baseline_perturbed_text = text + ' '.join([query_term]*K) + ' ' + FILLER
+                perturbed_text = text + ' '.join([query_term]*(K + 1)) + ' ' + ' '.join([FILLER]*(50 - K))
+                baseline_perturbed_text = text + ' '.join([query_term]*K) + ' ' + ' '.join([FILLER]*(50 - K + 1))
 
                 TFC2_corpus.at[i, 'text'] = perturbed_text
                 TFC2_baseline_corpus.at[i, 'text'] = baseline_perturbed_text
@@ -174,7 +175,7 @@ if __name__ == "__main__":
                         help="The perturbation to apply (e.g., append).")
     parser.add_argument("--TFC1-I", default="append", choices=["append", "prepend"],
                         help="Wether to add the query term at the beginning or end of the text.")
-    parser.add_argument("--TFC2", default=[1, 2, 5, 10, 50, 100], type=int, nargs='+',
+    parser.add_argument("--TFC2", default=[1, 2, 5, 10, 50], type=int, nargs='+',
                         help="The number of words to add to the text.")
 
     args = parser.parse_args()

@@ -347,7 +347,7 @@ and selected query term.
 '''
 def load_queries(query_path, selected_term_path):
     query_dict = load_jsonl_file_into_dict(query_path)
-    terms_dict = load_json_file(selected_term_path)["selected_query_terms"]
+    terms_dict = pd.read_csv(selected_term_path, index_col="qid")["selected_term"].to_dict()
 
     return query_dict, terms_dict
 
@@ -521,37 +521,36 @@ def grouped_bar_chart(data_array, heads, label_segs, save_path=None):
     return plt.gcf()
 
 
-def main(experiment_type, perturb_type):
+def main(args):
 
-    # NOTE
-    perturb_type = perturb_type
-    plot = [experiment_type]
-
+    # setup
+    perturb_type = args.perturb_type
+    plot = [args.experiment_type]
+    args.results_folder = f"results/{args.dataset}/"
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
+    os.makedirs(f"figures/{args.dataset}", exist_ok=True)
+    labels = ["[CLS]", "injected tokens", "query tokens matching injected", "query tokens not matching injected", "non query tokens", "[SEP]"]
+    if args.dataset == "TFC2":
+        scores_csv_path = f"data/{args.dataset}/results/{args.perturb_type}/{args.K}/computed_results.csv"
+        folder_suffix = f"/{args.perturb_type}/{args.K}"
+    else:
+        scores_csv_path = f"data/{args.dataset}/results/{args.perturb_type}/computed_results.csv"
+        folder_suffix = f"/{args.perturb_type}/"
+
     # Load tokenizer
     print("loading tokenizer")
     hf_model_name = "sebastian-hofstaetter/distilbert-dot-tas_b-b256-msmarco"
     tokenizer = AutoTokenizer.from_pretrained(hf_model_name)
 
     # Load full queries and selected terms
-    print("loading queries")
-    full_query_dict, selected_terms_dict = load_queries("data/queries.jsonl", "data/tfc1_add_{}_final_dd_corpus.json".format(perturb_type))
-    print("done loading")
-
-    scores_csv_path = "data/tfc1_add_{}_target_qids_scores.csv".format(perturb_type)
-
-    labels = ["[CLS]", "injected tokens", "query tokens matching injected", "query tokens not matching injected", "non query tokens", "[SEP]"]
-
-    if not os.path.exists("result_figures"):
-        os.mkdir("result_figures")
-    
+    full_query_dict, selected_terms_dict = load_queries("data/queries.jsonl", f"data/selected_query_terms.csv")    
     
     if "block" in plot:
         # Load, segment, and plot average block results
         print("plotting all block results")
-        all_block_results,  all_block_labels, all_block_qids, _ = load_all_results("block", os.path.join("results", perturb_type))
+        all_block_results,  all_block_labels, all_block_qids, _ = load_all_results("block", f"{args.results_folder}/results/{folder_suffix}")
         all_block_segmented = segment_tokens_all(all_block_results, all_block_labels, all_block_qids, perturb_type, full_query_dict, selected_terms_dict, tokenizer)
-        _ = plot_blocks_plotly(all_block_segmented, labels, "result_figures/{}_all_block_seg.png".format(perturb_type))
+        _ = plot_blocks_plotly(all_block_segmented, labels, f"figures/{args.dataset}/{perturb_type}_all_block_seg.png")
 
     
     if "head_all" in plot:
@@ -560,25 +559,25 @@ def main(experiment_type, perturb_type):
         top_ranked_doc_head_results, _, _ = load_doc_results_by_rank(
             "data/tfc1_add_{}_target_qids_scores.csv".format(perturb_type), 
             "head", 
-            os.path.join("results", perturb_type), 
-            os.path.join("results", perturb_type), 
+            os.path.join(f"{args.dataset}/results", perturb_type), 
+            os.path.join(f"{args.dataset}/results", perturb_type), 
             rank_start=1, 
             rank_end=10
         )
         avg_top_ranked_doc_head_results = np.mean(top_ranked_doc_head_results, axis=0)
-        _ = plot_heads(avg_top_ranked_doc_head_results, "result_figures/top_ranked_doc_head_results_{}.png".format(perturb_type))
+        _ = plot_heads(avg_top_ranked_doc_head_results, f"{args.results_folder}/result_figures/top_ranked_doc_head_results_{perturb_type}.png")
 
         print("plotting head results for bottom ranked documents")
         bottom_ranked_doc_head_results, _, _ = load_doc_results_by_rank(
             "data/tfc1_add_{}_target_qids_scores.csv".format(perturb_type), 
             "head", 
-            os.path.join("results", perturb_type), 
-            os.path.join("results", perturb_type), 
+            os.path.join(f"{args.dataset}/results", perturb_type), 
+            os.path.join(f"{args.dataset}/results", perturb_type), 
             rank_start=91, 
             rank_end=100
         )
         avg_bottom_ranked_doc_head_results = np.mean(bottom_ranked_doc_head_results, axis=0)
-        _ = plot_heads(avg_bottom_ranked_doc_head_results, "result_figures/bottom_ranked_doc_head_results_{}.png".format(perturb_type))
+        _ = plot_heads(avg_bottom_ranked_doc_head_results, f"{args.results_folder}/result_figures/bottom_ranked_doc_head_results_{perturb_type}.png")
 
 
     if "head_pos" in plot:
@@ -586,8 +585,8 @@ def main(experiment_type, perturb_type):
         heads = [(0,9), (1,6), (2,3), (3,8)]
         scores_df = pd.read_csv(scores_csv_path)
         head_decomp_data = load_head_decomp_by_rank(
-            os.path.join("results_head_decomp", perturb_type),
-             os.path.join("results", perturb_type), 
+            os.path.join(f"{args.dataset}/new_results_head_decomp", perturb_type),
+            os.path.join(f"{args.dataset}/results", perturb_type), 
             perturb_type, 
             scores_df, 
             heads, 
@@ -598,9 +597,9 @@ def main(experiment_type, perturb_type):
             tokenizer
         )
         labels = ["cls", "inj", "q_term_inj", "q_term_non_inj", "non_q_term", "sep"]
-        _ = grouped_bar_chart(head_decomp_data[0].T, heads, labels, save_path=f"result_figures/head_decomp_top_heads_{perturb_type}_overall.png")
-        _ = grouped_bar_chart(head_decomp_data[1].T, heads, labels, save_path=f"result_figures/head_decomp_top_heads_{perturb_type}_exists.png")
-        _ = grouped_bar_chart(head_decomp_data[2].T, heads, labels, save_path=f"result_figures/head_decomp_top_heads_{perturb_type}_not_exists.png")
+        _ = grouped_bar_chart(head_decomp_data[0].T, heads, labels, save_path=f"{args.results_folder}/result_figures/NEW_head_decomp_top_heads_{perturb_type}_overall.png")
+        _ = grouped_bar_chart(head_decomp_data[1].T, heads, labels, save_path=f"{args.results_folder}/result_figures/NEW_head_decomp_top_heads_{perturb_type}_exists.png")
+        _ = grouped_bar_chart(head_decomp_data[2].T, heads, labels, save_path=f"{args.results_folder}/result_figures/NEW_head_decomp_top_heads_{perturb_type}_not_exists.png")
 
 
     if "head_attn" in plot:
@@ -608,8 +607,8 @@ def main(experiment_type, perturb_type):
         heads = [(0,9), (1,6), (2,3), (3,8)]
         scores_df = pd.read_csv(scores_csv_path)
         head_data = load_head_pattern_by_rank(
-            os.path.join("results_attn_pattern", perturb_type), 
-            os.path.join("results", perturb_type), 
+            os.path.join(f"{args.dataset}/results_attn_pattern", perturb_type), 
+            os.path.join(f"{args.dataset}/results", perturb_type), 
             perturb_type, 
             scores_df, 
             heads, 
@@ -620,9 +619,9 @@ def main(experiment_type, perturb_type):
             tokenizer
         )
         labels = ["inj to qterm+", "qterm+ to inj", "inj to qterm-", "inj to sep", "other to sep"]
-        _ = grouped_bar_chart(head_data[0], heads, labels, save_path=f"result_figures/head_attn_pattern_{perturb_type}_overall.png")
-        _ = grouped_bar_chart(head_data[1], heads, labels, save_path=f"result_figures/head_attn_pattern_{perturb_type}_exists.png")
-        _ = grouped_bar_chart(head_data[2], heads, labels, save_path=f"result_figures/head_attn_pattern_{perturb_type}_not_exists.png")
+        _ = grouped_bar_chart(head_data[0], heads, labels, save_path=f"{args.results_folder}/result_figures/head_attn_pattern_{perturb_type}_overall.png")
+        _ = grouped_bar_chart(head_data[1], heads, labels, save_path=f"{args.results_folder}/result_figures/head_attn_pattern_{perturb_type}_exists.png")
+        _ = grouped_bar_chart(head_data[2], heads, labels, save_path=f"{args.results_folder}/result_figures/head_attn_pattern_{perturb_type}_not_exists.png")
 
     
     return
@@ -630,10 +629,13 @@ def main(experiment_type, perturb_type):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Plot results.")
-    parser.add_argument("--experiment_type", default="head_pos", choices=["block", "head_all", "head_pos", "head_attn", "labels"], 
+    parser.add_argument("--dataset", default="TFC1-R", choices=["TFC1-I", "TFC1-R", "TFC2"])
+    parser.add_argument("--experiment_type", default="block", choices=["block", "head_all", "head_pos", "head_attn", "labels"], 
                         help="What will be patched (e.g., block).")
-    parser.add_argument("--perturb_type", default="prepend", choices=["append", "prepend"], 
+    parser.add_argument("--perturb_type", default="append", choices=["append", "prepend"], 
                         help="The perturbation to apply (e.g., append).")
+    parser.add_argument("--results_folder", default="TFC1-R_results",  
+                        help="Where to store the results")
     args = parser.parse_args()
 
-    _ = main(args.experiment_type, args.perturb_type)
+    _ = main(args)

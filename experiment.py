@@ -296,6 +296,9 @@ def run_experiment(args):
             except Exception as e:
                 print(f"ERROR: {e} for query {qid} and document {doc_id}")
 
+            # save intermediate results
+            computed_results.to_csv(f"temp_intermediate_results.csv", index=False)
+
     # compute results and save
     computed_results['og_rank'] = computed_results.groupby('qid')['og_score'].rank(
         method='min',  # Use minimum rank for ties
@@ -320,15 +323,15 @@ def run_experiment(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run activation patching with the specific patching experiment and perturbation types.")
-    parser.add_argument("--dataset", default="TFC1-I", choices=["TFC1-I", "TFC1-R", "TFC2"])
+    parser.add_argument("--dataset", default="TFC2", choices=["TFC1-I", "TFC1-R", "TFC2"])
     parser.add_argument("--experiment_type", default="block", choices=["block", "head_all", "head_pos", "head_attn", "labels", "TFC1-R"], 
                         help="What will be patched (e.g., block).")
     parser.add_argument("--perturb_type", default="append", choices=["append", "prepend"], 
                         help="The perturbation to apply (e.g., append).")
-    parser.add_argument("--TFC2_K", default=1, type=int, choices=[1, 2, 5, 10, 50, 100], help="K")
+    parser.add_argument("--TFC2_K", default=1, type=int, choices=[1, 2, 5, 10, 50], help="K")
     
     # reduced dataset
-    parser.add_argument("--reduced_dataset", default=True, action='store_true',
+    parser.add_argument("--reduced_dataset", default=False, action='store_true',
                         help="Whether to use a reduced dataset.")
     parser.add_argument("--n_queries", type=int, default=1, 
                         help="Number of queries to use if using a reduced dataset.")
@@ -338,7 +341,7 @@ if __name__ == "__main__":
     # reproducibility
     parser.add_argument("--seed", default=42, type=int, help="Random seed.")
     parser.add_argument("--skip_already_computed", default=False, action='store_true', help="Do not overwrite already computed files and do not recompute results.")
-    parser.add_argument("--save", default=False, help="Save results.")
+    parser.add_argument("--save", default=True, help="Save results.")
 
     args = parser.parse_args()
 
