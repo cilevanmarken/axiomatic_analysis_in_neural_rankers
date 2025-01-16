@@ -347,7 +347,12 @@ and selected query term.
 '''
 def load_queries(query_path, selected_term_path):
     query_dict = load_jsonl_file_into_dict(query_path)
-    terms_dict = pd.read_csv(selected_term_path, index_col="qid")["selected_term"].to_dict()
+    terms_df = pd.read_csv(selected_term_path, index_col="query_id")["query_term"].to_dict()
+
+    # convert keys to strings
+    terms_dict = {}
+    for key, val in terms_df.items():
+        terms_dict[str(key)] = val
 
     return query_dict, terms_dict
 
@@ -372,7 +377,7 @@ def segment_tokens_all(data, labels, qids, perturb_type, full_q_dict, selected_t
         qid = qids[i]
 
         if qid not in qid_lookup:
-            full_q, selected_term = get_query_data(qid, full_q_dict, selected_terms_dict)
+            full_q, selected_term = get_query_data(str(qid), full_q_dict, selected_terms_dict)
             qid_lookup[qid] = {
                 "full_query_toks": [tokenizer.tokenize(term) for term in full_q.split()],
                 "selected_term_toks": tokenizer.tokenize(selected_term),
@@ -526,15 +531,14 @@ def main(args):
     # setup
     perturb_type = args.perturb_type
     plot = [args.experiment_type]
-    args.results_folder = f"results/{args.dataset}/"
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     os.makedirs(f"figures/{args.dataset}", exist_ok=True)
     labels = ["[CLS]", "injected tokens", "query tokens matching injected", "query tokens not matching injected", "non query tokens", "[SEP]"]
     if args.dataset == "TFC2":
-        scores_csv_path = f"data/{args.dataset}/results/{args.perturb_type}/{args.K}/computed_results.csv"
-        folder_suffix = f"/{args.perturb_type}/{args.K}"
+        scores_csv_path = f"data/{args.dataset}/computed_results_{args.perturb_type}_{args.TFC2_K}.csv"
+        folder_suffix = f"/{args.perturb_type}/{args.TFC2_K}"
     else:
-        scores_csv_path = f"data/{args.dataset}/results/{args.perturb_type}/computed_results.csv"
+        scores_csv_path = f"data/{args.dataset}/computed_results_{args.perturb_type}.csv"
         folder_suffix = f"/{args.perturb_type}/"
 
     # Load tokenizer
@@ -543,7 +547,7 @@ def main(args):
     tokenizer = AutoTokenizer.from_pretrained(hf_model_name)
 
     # Load full queries and selected terms
-    full_query_dict, selected_terms_dict = load_queries("data/queries.jsonl", f"data/selected_query_terms.csv")    
+    full_query_dict, selected_terms_dict = load_queries("data/queries.jsonl", f"data/selected_query_terms.csv") 
     
     if "block" in plot:
         # Load, segment, and plot average block results
@@ -556,28 +560,39 @@ def main(args):
     if "head_all" in plot:
         #  Load and plot head results for top/bottom ranked documents
         print("plotting head results for top ranked documents")
+        if args.dataset == "TFC2":
+            computed_results_path = f"data/{args.dataset}/computed_results_{perturb_type}_{args.TFC2_K}.csv"
+            results_path = f"{args.results_folder}/results_head_decomp/{args.perturb_type}/{args.TFC2_K}"
+            top_save_path = f"figures/{args.dataset}/top_ranked_doc_head_results_{perturb_type}_{args.TFC2_K}.png"
+            bottom_save_path = f"figures/{args.dataset}/bottom_ranked_doc_head_results_{perturb_type}_{args.TFC2_K}.png"
+        else:
+            computed_results_path = f"data/{args.dataset}/computed_results_{perturb_type}.csv"
+            results_path = f"{args.results_folder}/results_head_decomp/{args.perturb_type}"
+            top_save_path = f"figures/{args.dataset}/top_ranked_doc_head_results_{perturb_type}.png"
+            bottom_save_path = f"figures/{args.dataset}/bottom_ranked_doc_head_results_{perturb_type}.png"
+
         top_ranked_doc_head_results, _, _ = load_doc_results_by_rank(
-            "data/tfc1_add_{}_target_qids_scores.csv".format(perturb_type), 
+            computed_results_path, 
             "head", 
-            os.path.join(f"{args.dataset}/results", perturb_type), 
-            os.path.join(f"{args.dataset}/results", perturb_type), 
+            results_path, 
+            results_path, 
             rank_start=1, 
             rank_end=10
         )
         avg_top_ranked_doc_head_results = np.mean(top_ranked_doc_head_results, axis=0)
-        _ = plot_heads(avg_top_ranked_doc_head_results, f"{args.results_folder}/result_figures/top_ranked_doc_head_results_{perturb_type}.png")
+        _ = plot_heads(avg_top_ranked_doc_head_results, top_save_path)
 
         print("plotting head results for bottom ranked documents")
         bottom_ranked_doc_head_results, _, _ = load_doc_results_by_rank(
-            "data/tfc1_add_{}_target_qids_scores.csv".format(perturb_type), 
+            computed_results_path, 
             "head", 
-            os.path.join(f"{args.dataset}/results", perturb_type), 
-            os.path.join(f"{args.dataset}/results", perturb_type), 
+            results_path, 
+            results_path, 
             rank_start=91, 
             rank_end=100
         )
         avg_bottom_ranked_doc_head_results = np.mean(bottom_ranked_doc_head_results, axis=0)
-        _ = plot_heads(avg_bottom_ranked_doc_head_results, f"{args.results_folder}/result_figures/bottom_ranked_doc_head_results_{perturb_type}.png")
+        _ = plot_heads(avg_bottom_ranked_doc_head_results, bottom_save_path)
 
 
     if "head_pos" in plot:
@@ -629,13 +644,14 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Plot results.")
-    parser.add_argument("--dataset", default="TFC1-R", choices=["TFC1-I", "TFC1-R", "TFC2"])
-    parser.add_argument("--experiment_type", default="block", choices=["block", "head_all", "head_pos", "head_attn", "labels"], 
+    parser.add_argument("--dataset", default="TFC2", choices=["TFC1-I", "TFC1-R", "TFC2"])
+    parser.add_argument("--experiment_type", default="head_all", choices=["block", "head_all", "head_pos", "head_attn", "labels"], 
                         help="What will be patched (e.g., block).")
     parser.add_argument("--perturb_type", default="append", choices=["append", "prepend"], 
                         help="The perturbation to apply (e.g., append).")
-    parser.add_argument("--results_folder", default="TFC1-R_results",  
-                        help="Where to store the results")
+    parser.add_argument("--TFC2_K", default=1, type=int, choices=[1, 2, 5, 10, 50], help="K")
     args = parser.parse_args()
+
+    args.results_folder = f"results/{args.dataset}/"
 
     _ = main(args)
