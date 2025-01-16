@@ -191,11 +191,12 @@ def run_experiment(args):
                 perturbed_score = torch.matmul(q_embedding, perturbed_embedding.t())
 
                 # save these scores
-                mask = (computed_results['qid'] == str(qid)) & (computed_results['doc_id'] == str(doc_id))
-                computed_results.loc[mask, "og_score"] = baseline_score.item()
-                computed_results.loc[mask, "p_score"] = perturbed_score.item()
-                computed_results.loc[mask, "score_diff"] = perturbed_score.item() - baseline_score.item()
-                computed_results.loc[mask, "percent_change"] = (perturbed_score.item() - baseline_score.item()) / baseline_score.item()
+                if args.experiment_type == "block":
+                    mask = (computed_results['qid'] == str(qid)) & (computed_results['doc_id'] == str(doc_id))
+                    computed_results.loc[mask, "og_score"] = baseline_score.item()
+                    computed_results.loc[mask, "p_score"] = perturbed_score.item()
+                    computed_results.loc[mask, "score_diff"] = perturbed_score.item() - baseline_score.item()
+                    computed_results.loc[mask, "percent_change"] = (perturbed_score.item() - baseline_score.item()) / baseline_score.item()
 
                 '''
                 Linear function of score diff, calibrated so that it equals 0 when performance is 
@@ -300,7 +301,7 @@ def run_experiment(args):
                                 for item in labels:
                                     f.write(str(item) + '\n')
                         else:
-                            with open(f"{args.logging_folder}/{args.perturb_type}/{qid}_{doc_id}_labels.txt", "w", encoding='utf-8') as f:
+                            with open(f"{args.logging_folder}/results/{args.perturb_type}/{qid}_{doc_id}_labels.txt", "w", encoding='utf-8') as f:
                                 for item in labels:
                                     f.write(str(item) + '\n')
 
@@ -309,7 +310,8 @@ def run_experiment(args):
                 print(f"ERROR: {e} for query {qid} and document {doc_id}")
 
             # save intermediate results
-            computed_results.to_csv(f"temp_intermediate_results.csv", index=False)
+            if args.experiment_type == "block" and args.save:
+                computed_results.to_csv(f"temp_intermediate_results.csv", index=False)
 
     # compute results and save
     computed_results['og_rank'] = computed_results.groupby('qid')['og_score'].rank(
@@ -326,24 +328,25 @@ def run_experiment(args):
 
     # save
     # add date to end of file
-    if args.dataset == "TFC2" and args.save:
-        computed_results.to_csv(f"data/{args.dataset}/computed_results_{args.perturb_type}_{args.TFC2_K}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", index=False)
-    else:
-        computed_results.to_csv(f"data/{args.dataset}/results/{args.perturb_type}/computed_results_{args.perturb_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", index=False)
+    if args.experiment_type =="block" and args.save:
+        if args.dataset == "TFC2":
+            computed_results.to_csv(f"data/{args.dataset}/computed_results_{args.perturb_type}_{args.TFC2_K}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", index=False)
+        else:
+            computed_results.to_csv(f"data/{args.dataset}/computed_results_{args.perturb_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", index=False)
 
     return
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run activation patching with the specific patching experiment and perturbation types.")
-    parser.add_argument("--dataset", default="TFC2", choices=["TFC1-I", "TFC1-R", "TFC2"])
-    parser.add_argument("--experiment_type", default="block", choices=["block", "head_all", "head_pos", "head_attn", "labels", "TFC1-R"], 
+    parser.add_argument("--dataset", default="TFC1-R", choices=["TFC1-I", "TFC1-R", "TFC2"])
+    parser.add_argument("--experiment_type", default="labels", choices=["block", "head_all", "head_pos", "head_attn", "labels", "TFC1-R"], 
                         help="What will be patched (e.g., block).")
     parser.add_argument("--perturb_type", default="append", choices=["append", "prepend"], 
                         help="The perturbation to apply (e.g., append).")
-    parser.add_argument("--TFC2_K", default=1, type=int, choices=[1, 2, 5, 10, 50], help="K")
+    parser.add_argument("--TFC2_K", default=5, type=int, choices=[1, 2, 5, 10, 50], help="K")
     
     # reduced dataset
-    parser.add_argument("--reduced_dataset", default=True, action='store_true',
+    parser.add_argument("--reduced_dataset", default=False, action='store_true',
                         help="Whether to use a reduced dataset.")
     parser.add_argument("--n_queries", type=int, default=1, 
                         help="Number of queries to use if using a reduced dataset.")
