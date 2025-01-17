@@ -121,7 +121,8 @@ def run_experiment(args):
         # Get and preprocess documents
         target_docs = tfc1_add_dd_corpus[str(qid)]
         if args.reduced_dataset:
-            target_doc_ids = random.sample(list(target_docs.keys()), args.n_docs)
+            # get first n docs
+            target_doc_ids = list(target_docs.keys())[:args.n_docs]
             target_docs = {doc_id: target_docs[doc_id] for doc_id in target_doc_ids}
         corpus_dataloader = preprocess_corpus(target_docs, tokenizer)
 
@@ -191,7 +192,7 @@ def run_experiment(args):
                 perturbed_score = torch.matmul(q_embedding, perturbed_embedding.t())
 
                 # save these scores
-                if args.experiment_type == "block":
+                if args.save_intermediate:
                     mask = (computed_results['qid'] == str(qid)) & (computed_results['doc_id'] == str(doc_id))
                     computed_results.loc[mask, "og_score"] = baseline_score.item()
                     computed_results.loc[mask, "p_score"] = perturbed_score.item()
@@ -310,7 +311,7 @@ def run_experiment(args):
                 print(f"ERROR: {e} for query {qid} and document {doc_id}")
 
             # save intermediate results
-            if args.experiment_type == "block" and args.save:
+            if args.save_intermediate:
                 computed_results.to_csv(f"temp_intermediate_results.csv", index=False)
 
     # compute results and save
@@ -327,8 +328,7 @@ def run_experiment(args):
     computed_results['change_in_rank'] = computed_results['og_rank'] - computed_results['p_rank']
 
     # save
-    # add date to end of file
-    if args.experiment_type =="block" and args.save:
+    if args.save_intermediate:
         if args.dataset == "TFC2":
             computed_results.to_csv(f"data/{args.dataset}/computed_results_{args.perturb_type}_{args.TFC2_K}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", index=False)
         else:
@@ -338,24 +338,25 @@ def run_experiment(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run activation patching with the specific patching experiment and perturbation types.")
-    parser.add_argument("--dataset", default="TFC1-R", choices=["TFC1-I", "TFC1-R", "TFC2"])
-    parser.add_argument("--experiment_type", default="labels", choices=["block", "head_all", "head_pos", "head_attn", "labels", "TFC1-R"], 
+    parser.add_argument("--dataset", default="TFC2", choices=["TFC1-I", "TFC1-R", "TFC2"])
+    parser.add_argument("--experiment_type", default="block", choices=["block", "head_all", "head_pos", "head_attn", "labels"], 
                         help="What will be patched (e.g., block).")
     parser.add_argument("--perturb_type", default="append", choices=["append", "prepend"], 
                         help="The perturbation to apply (e.g., append).")
     parser.add_argument("--TFC2_K", default=5, type=int, choices=[1, 2, 5, 10, 50], help="K")
+    parser.add_argument("--save_intermediate", default=True, help="Save intermediate results.")
     
     # reduced dataset
     parser.add_argument("--reduced_dataset", default=False, action='store_true',
                         help="Whether to use a reduced dataset.")
     parser.add_argument("--n_queries", type=int, default=1, 
                         help="Number of queries to use if using a reduced dataset.")
-    parser.add_argument("--n_docs", type=int, default=4, 
+    parser.add_argument("--n_docs", type=int, default=3, 
                         help="Number of documents to use if using a reduced dataset.")
     
     # reproducibility
     parser.add_argument("--seed", default=42, type=int, help="Random seed.")
-    parser.add_argument("--skip_already_computed", default=False, action='store_true', help="Do not overwrite already computed files and do not recompute results.")
+    parser.add_argument("--skip_already_computed", default=True, action='store_true', help="Do not overwrite already computed files and do not recompute results.")
     parser.add_argument("--save", default=True, help="Save results.")
 
     args = parser.parse_args()

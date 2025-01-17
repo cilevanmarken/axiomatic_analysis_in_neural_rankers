@@ -67,7 +67,7 @@ def load_doc_results_by_rank(scores_fname, result_type, results_path, labels_pat
     # Load files
     results, labels, qids = [], [], []
     for qid, doc_id in target_docs:
-        result_fname = os.path.join(results_path, "{}_{}_{}.npy".format(qid, doc_id, result_type))
+        result_fname = os.path.join(results_path, "{}_{}_{}.npy".format(qid, doc_id, result_type))  
 
         if os.path.exists(result_fname):
             result_data = np.load(result_fname)
@@ -561,18 +561,17 @@ def main(args):
         #  Load and plot head results for top/bottom ranked documents
         print("plotting head results for top ranked documents")
         if args.dataset == "TFC2":
-            computed_results_path = f"data/{args.dataset}/computed_results_{perturb_type}_{args.TFC2_K}.csv"
             results_path = f"{args.results_folder}/results_head_decomp/{args.perturb_type}/{args.TFC2_K}"
-            top_save_path = f"figures/{args.dataset}/top_ranked_doc_head_results_{perturb_type}_{args.TFC2_K}.png"
-            bottom_save_path = f"figures/{args.dataset}/bottom_ranked_doc_head_results_{perturb_type}_{args.TFC2_K}.png"
+            top_save_path = f"figures/{args.dataset}/top_ranked_doc_head_results_{args.perturb_type}_{args.TFC2_K}.png"
+            bottom_save_path = f"figures/{args.dataset}/bottom_ranked_doc_head_results_{args.perturb_type}_{args.TFC2_K}.png"
         else:
-            computed_results_path = f"data/{args.dataset}/computed_results_{perturb_type}.csv"
             results_path = f"{args.results_folder}/results_head_decomp/{args.perturb_type}"
-            top_save_path = f"figures/{args.dataset}/top_ranked_doc_head_results_{perturb_type}.png"
-            bottom_save_path = f"figures/{args.dataset}/bottom_ranked_doc_head_results_{perturb_type}.png"
+            top_save_path = f"figures/{args.dataset}/top_ranked_doc_head_results_{args.perturb_type}.png"
+            bottom_save_path = f"figures/{args.dataset}/bottom_ranked_doc_head_results_{args.perturb_type}.png"
 
+        print("in function")
         top_ranked_doc_head_results, _, _ = load_doc_results_by_rank(
-            computed_results_path, 
+            scores_csv_path, 
             "head", 
             results_path, 
             results_path, 
@@ -584,7 +583,7 @@ def main(args):
 
         print("plotting head results for bottom ranked documents")
         bottom_ranked_doc_head_results, _, _ = load_doc_results_by_rank(
-            computed_results_path, 
+            scores_csv_path, 
             "head", 
             results_path, 
             results_path, 
@@ -596,12 +595,20 @@ def main(args):
 
 
     if "head_pos" in plot:
+
+        if args.dataset == "TFC2":
+            head_decomp_results_path = f"{args.results_folder}/results_head_decomp/{args.perturb_type}/{args.TFC2_K}"
+            results_path = f"{args.results_folder}/results/{args.perturb_type}/{args.TFC2_K}"
+        else:
+            head_decomp_results_path = f"{args.results_folder}/results_head_decomp/{args.perturb_type}"
+            results_path = f"{args.results_folder}/results/{args.perturb_type}"
+
         # head patching and attention patterns for top ranked documents by position
         heads = [(0,9), (1,6), (2,3), (3,8)]
         scores_df = pd.read_csv(scores_csv_path)
         head_decomp_data = load_head_decomp_by_rank(
-            os.path.join(f"{args.dataset}/new_results_head_decomp", perturb_type),
-            os.path.join(f"{args.dataset}/results", perturb_type), 
+            head_decomp_results_path,
+            results_path, 
             perturb_type, 
             scores_df, 
             heads, 
@@ -612,18 +619,26 @@ def main(args):
             tokenizer
         )
         labels = ["cls", "inj", "q_term_inj", "q_term_non_inj", "non_q_term", "sep"]
-        _ = grouped_bar_chart(head_decomp_data[0].T, heads, labels, save_path=f"{args.results_folder}/result_figures/NEW_head_decomp_top_heads_{perturb_type}_overall.png")
-        _ = grouped_bar_chart(head_decomp_data[1].T, heads, labels, save_path=f"{args.results_folder}/result_figures/NEW_head_decomp_top_heads_{perturb_type}_exists.png")
-        _ = grouped_bar_chart(head_decomp_data[2].T, heads, labels, save_path=f"{args.results_folder}/result_figures/NEW_head_decomp_top_heads_{perturb_type}_not_exists.png")
+        _ = grouped_bar_chart(head_decomp_data[0].T, heads, labels, save_path=f"figures/{args.dataset}/head_decomp_top_heads_{perturb_type}_overall.png")
+        _ = grouped_bar_chart(head_decomp_data[1].T, heads, labels, save_path=f"figures/{args.dataset}/head_decomp_top_heads_{perturb_type}_exists.png")
+        _ = grouped_bar_chart(head_decomp_data[2].T, heads, labels, save_path=f"figures/{args.dataset}/head_decomp_top_heads_{perturb_type}_not_exists.png")
 
 
     if "head_attn" in plot:
+
+        if args.dataset == "TFC2":
+            head_attn_results_path = f"{args.results_folder}/results_attn_pattern/{args.perturb_type}/{args.TFC2_K}"
+            results_path = f"{args.results_folder}/results/{args.perturb_type}/{args.TFC2_K}"
+        else:
+            head_attn_results_path = f"{args.results_folder}/results_attn_pattern/{args.perturb_type}"
+            results_path = f"{args.results_folder}/results/{args.perturb_type}"
+    
         print("plotting head attention")
         heads = [(0,9), (1,6), (2,3), (3,8)]
         scores_df = pd.read_csv(scores_csv_path)
         head_data = load_head_pattern_by_rank(
-            os.path.join(f"{args.dataset}/results_attn_pattern", perturb_type), 
-            os.path.join(f"{args.dataset}/results", perturb_type), 
+            head_attn_results_path, 
+            results_path, 
             perturb_type, 
             scores_df, 
             heads, 
@@ -634,11 +649,10 @@ def main(args):
             tokenizer
         )
         labels = ["inj to qterm+", "qterm+ to inj", "inj to qterm-", "inj to sep", "other to sep"]
-        _ = grouped_bar_chart(head_data[0], heads, labels, save_path=f"{args.results_folder}/result_figures/head_attn_pattern_{perturb_type}_overall.png")
-        _ = grouped_bar_chart(head_data[1], heads, labels, save_path=f"{args.results_folder}/result_figures/head_attn_pattern_{perturb_type}_exists.png")
-        _ = grouped_bar_chart(head_data[2], heads, labels, save_path=f"{args.results_folder}/result_figures/head_attn_pattern_{perturb_type}_not_exists.png")
+        _ = grouped_bar_chart(head_data[0], heads, labels, save_path=f"figures/{args.dataset}/head_attn_pattern_{perturb_type}_overall.png")
+        _ = grouped_bar_chart(head_data[1], heads, labels, save_path=f"figures/{args.dataset}/head_attn_pattern_{perturb_type}_exists.png")
+        _ = grouped_bar_chart(head_data[2], heads, labels, save_path=f"figures/{args.dataset}/head_attn_pattern_{perturb_type}_not_exists.png")
 
-    
     return
 
 
@@ -649,7 +663,7 @@ if __name__ == "__main__":
                         help="What will be patched (e.g., block).")
     parser.add_argument("--perturb_type", default="append", choices=["append", "prepend"], 
                         help="The perturbation to apply (e.g., append).")
-    parser.add_argument("--TFC2_K", default=1, type=int, choices=[1, 2, 5, 10, 50], help="K")
+    parser.add_argument("--TFC2_K", default=2, type=int, choices=[1, 2, 5, 10, 50], help="K")
     args = parser.parse_args()
 
     args.results_folder = f"results/{args.dataset}/"
