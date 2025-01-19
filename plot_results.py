@@ -369,7 +369,7 @@ For block results, reformat into smaller segments.
 - Segment: [CLS] + [injected tokens] + [existing query term tokens] + [non query term tokens] + [SEP]
 - Segment: [CLS] + [injected tokens] + [existing query term tokens matching injected tokens] + [existing qterm tokens not matching injected tokens] + [non query term tokens] + [SEP]
 '''
-def segment_tokens_all(data, labels, qids, perturb_type, full_q_dict, selected_terms_dict, tokenizer):
+def segment_tokens_all(data, labels, qids, perturb_type, full_q_dict, selected_terms_dict, tokenizer, args):
     segmented_data = []
     qid_lookup = {} # for faster lookup
     for i, result in enumerate(data):
@@ -395,56 +395,124 @@ def segment_tokens_all(data, labels, qids, perturb_type, full_q_dict, selected_t
         # Get [CLS] token
         cls_tok = result[:,:,0][:, :, np.newaxis] # shape: (n_components, n_layers, 1)
 
-        # Get injected tokens
-        if perturb_type == "prepend": #prepend
-            og_doc_end_idx = len(label) - 1
-            inj_toks = np.mean(result[:,:,1:og_doc_start_idx], axis=-1)[:,:,np.newaxis] # shape: (n_components, n_layers, 1)
-        elif perturb_type == "append": #append
-            og_doc_end_idx = len(label) - len(selected_term_toks) - 1
-            inj_toks = np.mean(result[:,:,-len(selected_term_toks) - 1:-1], axis=-1)[:,:,np.newaxis]
+        if args.dataset == "TFC1-I":
+            # Get injected tokens
+            if perturb_type == "prepend": #prepend
+                og_doc_end_idx = len(label) - 1
+                inj_toks = np.mean(result[:,:,1:og_doc_start_idx], axis=-1)[:,:,np.newaxis] # shape: (n_components, n_layers, 1)
+            elif perturb_type == "append": #append
+                og_doc_end_idx = len(label) - len(selected_term_toks) - 1
+                inj_toks = np.mean(result[:,:,-len(selected_term_toks) - 1:-1], axis=-1)[:,:,np.newaxis]
 
-        # Get all query term tokens existing in original document
-        q_term_inj_idxs = []
-        q_term_non_inj_idxs = []
-        for query_tokens in full_q_tok_list:
-            inj_tok_idxs = []
-            non_inj_tok_idxs = []
+            # Get all query term tokens existing in original document
+            q_term_inj_idxs = []
+            q_term_non_inj_idxs = []
+            for query_tokens in full_q_tok_list:
+                inj_tok_idxs = []
+                non_inj_tok_idxs = []
 
-            # strict query term matching
-            for i in range(og_doc_start_idx, og_doc_end_idx + 1 - len(query_tokens)):
-                window = label[i:i+len(query_tokens)]
-                if window == query_tokens:
-                    window_range = range(i, i+len(query_tokens))
-        
-
-                    if window == selected_term_toks:
-                        inj_tok_idxs = inj_tok_idxs + [*window_range]
-                    else:
-                        non_inj_tok_idxs = non_inj_tok_idxs + [*window_range]
-
-            q_term_inj_idxs = q_term_inj_idxs + inj_tok_idxs
-            q_term_non_inj_idxs = q_term_non_inj_idxs + non_inj_tok_idxs
-
-        if not q_term_inj_idxs:
-            q_term_inj_toks = np.zeros((result.shape[0], result.shape[1], 1))
-        else:
-            q_term_inj_toks = np.mean(result[:,:,q_term_inj_idxs], axis=-1)[:,:,np.newaxis] # shape: (n_components, n_layers, 1)
-
-        if not q_term_non_inj_idxs:
-            q_term_non_inj_toks = np.zeros((result.shape[0], result.shape[1], 1))
-        else:
-            q_term_non_inj_toks = np.mean(result[:,:,q_term_non_inj_idxs], axis=-1)[:,:,np.newaxis]
+                # strict query term matching
+                for i in range(og_doc_start_idx, og_doc_end_idx + 1 - len(query_tokens)):
+                    window = label[i:i+len(query_tokens)]
+                    if window == query_tokens:
+                        window_range = range(i, i+len(query_tokens))
             
-        # Calculate all non query term tokens
-        all_doc_idxs = list(range(og_doc_start_idx, len(label)))
-        non_q_term_idxs = list(set(all_doc_idxs) - set(q_term_inj_idxs) - set(q_term_non_inj_idxs))
-        non_q_term_toks = np.mean(result[:,:,non_q_term_idxs], axis=-1)[:,:,np.newaxis] # shape: (n_components, n_layers, 1)
+
+                        if window == selected_term_toks:
+                            inj_tok_idxs = inj_tok_idxs + [*window_range]
+                        else:
+                            non_inj_tok_idxs = non_inj_tok_idxs + [*window_range]
+
+                q_term_inj_idxs = q_term_inj_idxs + inj_tok_idxs
+                q_term_non_inj_idxs = q_term_non_inj_idxs + non_inj_tok_idxs
+
+            if not q_term_inj_idxs:
+                q_term_inj_toks = np.zeros((result.shape[0], result.shape[1], 1))
+            else:
+                q_term_inj_toks = np.mean(result[:,:,q_term_inj_idxs], axis=-1)[:,:,np.newaxis] # shape: (n_components, n_layers, 1)
+
+            if not q_term_non_inj_idxs:
+                q_term_non_inj_toks = np.zeros((result.shape[0], result.shape[1], 1))
+            else:
+                q_term_non_inj_toks = np.mean(result[:,:,q_term_non_inj_idxs], axis=-1)[:,:,np.newaxis]
+                
+            # Calculate all non query term tokens
+            all_doc_idxs = list(range(og_doc_start_idx, len(label)))
+            non_q_term_idxs = list(set(all_doc_idxs) - set(q_term_inj_idxs) - set(q_term_non_inj_idxs))
+            non_q_term_toks = np.mean(result[:,:,non_q_term_idxs], axis=-1)[:,:,np.newaxis] # shape: (n_components, n_layers, 1)
+
+
+        elif args.dataset == "TFC1-R":
+            raise NotImplementedError("TFC1-R not implemented yet.")
+        
+        elif args.dataset == "TFC2":  # New TFC2 logic
+
+            # define borders
+            og_doc_end_idx = len(label) - (args.TFC2_n_filler - args.TFC2_K - 1) - ((args.TFC2_K + 1) * len(selected_term_toks)) - 1
+            inj_toks_start_idx = og_doc_end_idx
+            inj_toks_end_idx = len(label) - (args.TFC2_n_filler - args.TFC2_K - 1) - 1
+
+            # calculate injected tokens - NOTE: klopt dit
+            inj_toks = np.mean(result[:, :, inj_toks_start_idx:inj_toks_end_idx], axis=-1)[:, :, np.newaxis]
+
+            # Get all query term tokens existing in original document
+            q_term_inj_idxs = []
+            q_term_non_inj_idxs = []
+    
+            for query_tokens in full_q_tok_list:
+                inj_tok_idxs = []
+                non_inj_tok_idxs = []
+
+                # strict query term matching
+                for i in range(og_doc_start_idx, og_doc_end_idx - len(selected_term_toks) + 1):
+                    window = label[i:i+len(query_tokens)]
+                    if window == query_tokens:
+                        window_range = range(i, i+len(query_tokens))
+            
+                        if window == selected_term_toks:
+                            inj_tok_idxs = inj_tok_idxs + [*window_range]
+                        else:
+                            non_inj_tok_idxs = non_inj_tok_idxs + [*window_range]
+
+                q_term_inj_idxs = q_term_inj_idxs + inj_tok_idxs
+                q_term_non_inj_idxs = q_term_non_inj_idxs + non_inj_tok_idxs
+
+            if not q_term_inj_idxs:
+                q_term_inj_toks = np.zeros((result.shape[0], result.shape[1], 1))
+            else:
+                q_term_inj_toks = np.mean(result[:,:,q_term_inj_idxs], axis=-1)[:,:,np.newaxis] # shape: (n_components, n_layers, 1)
+
+            if not q_term_non_inj_idxs:
+                q_term_non_inj_toks = np.zeros((result.shape[0], result.shape[1], 1))
+            else:
+                q_term_non_inj_toks = np.mean(result[:,:,q_term_non_inj_idxs], axis=-1)[:,:,np.newaxis]
+                
+            # Calculate all non query term tokens
+            all_doc_idxs = list(range(og_doc_start_idx, len(label)))
+            inj_toks_idxs = list(range(inj_toks_start_idx, inj_toks_end_idx + 1))
+            non_q_term_idxs = list(set(all_doc_idxs) - set(q_term_inj_idxs) - set(q_term_non_inj_idxs) - set(inj_toks_idxs))
+            non_q_term_toks = np.mean(result[:,:,non_q_term_idxs], axis=-1)[:,:,np.newaxis] # shape: (n_components, n_layers, 1)
+
+            # # check if segmentation makes sense
+            # print(f"Og label: {label[:og_doc_end_idx]}")
+            # print()
+            # print(f"Inject tokens: {label[inj_toks_start_idx:inj_toks_end_idx]}")
+            # print()
+            # print(f"Query terms not matching injected: {[label[x] for x in q_term_non_inj_idxs]}")
+            # print()
+            # print(f"Query terms matching injected: {[label[x] for x in q_term_inj_idxs]}")
+            # print()
+            # print(f"Non query terms: {[label[x] for x in non_q_term_idxs]}")
+            # quit()
 
         # Get [SEP] token
-        sep_tok = result[:,:,-1][:, :, np.newaxis] # shape: (n_components, n_layers, 1)
+        sep_tok = result[:, :, -1][:, :, np.newaxis]
 
-        # Concat along last axis
-        new_result = np.concatenate([cls_tok, inj_toks, q_term_inj_toks, q_term_non_inj_toks, non_q_term_toks, sep_tok], axis=2)
+        # Concatenate along the last axis
+        new_result = np.concatenate(
+            [cls_tok, inj_toks, q_term_inj_toks, q_term_non_inj_toks, non_q_term_toks, sep_tok], axis=2
+        )
+
         segmented_data.append(new_result)
 
     return np.mean(np.array(segmented_data), axis=0)
@@ -553,7 +621,7 @@ def main(args):
         # Load, segment, and plot average block results
         print("plotting all block results")
         all_block_results,  all_block_labels, all_block_qids, _ = load_all_results("block", f"{args.results_folder}/results/{folder_suffix}")
-        all_block_segmented = segment_tokens_all(all_block_results, all_block_labels, all_block_qids, perturb_type, full_query_dict, selected_terms_dict, tokenizer)
+        all_block_segmented = segment_tokens_all(all_block_results, all_block_labels, all_block_qids, perturb_type, full_query_dict, selected_terms_dict, tokenizer, args)
         _ = plot_blocks_plotly(all_block_segmented, labels, f"figures/{args.dataset}/{perturb_type}_all_block_seg.png")
 
     
@@ -569,7 +637,6 @@ def main(args):
             top_save_path = f"figures/{args.dataset}/top_ranked_doc_head_results_{args.perturb_type}.png"
             bottom_save_path = f"figures/{args.dataset}/bottom_ranked_doc_head_results_{args.perturb_type}.png"
 
-        print("in function")
         top_ranked_doc_head_results, _, _ = load_doc_results_by_rank(
             scores_csv_path, 
             "head", 
@@ -659,13 +726,15 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Plot results.")
     parser.add_argument("--dataset", default="TFC2", choices=["TFC1-I", "TFC1-R", "TFC2"])
-    parser.add_argument("--experiment_type", default="head_all", choices=["block", "head_all", "head_pos", "head_attn", "labels"], 
+    parser.add_argument("--experiment_type", default="block", choices=["block", "head_all", "head_pos", "head_attn", "labels"], 
                         help="What will be patched (e.g., block).")
     parser.add_argument("--perturb_type", default="append", choices=["append", "prepend"], 
                         help="The perturbation to apply (e.g., append).")
     parser.add_argument("--TFC2_K", default=2, type=int, choices=[1, 2, 5, 10, 50], help="K")
     args = parser.parse_args()
 
+    # non variable args
     args.results_folder = f"results/{args.dataset}/"
+    args.TFC2_n_filler = 51
 
     _ = main(args)
