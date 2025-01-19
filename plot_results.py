@@ -441,9 +441,50 @@ def segment_tokens_all(data, labels, qids, perturb_type, full_q_dict, selected_t
             non_q_term_idxs = list(set(all_doc_idxs) - set(q_term_inj_idxs) - set(q_term_non_inj_idxs))
             non_q_term_toks = np.mean(result[:,:,non_q_term_idxs], axis=-1)[:,:,np.newaxis] # shape: (n_components, n_layers, 1)
 
-
         elif args.dataset == "TFC1-R":
-            raise NotImplementedError("TFC1-R not implemented yet.")
+
+            # define borders
+            og_doc_end_idx = len(label)
+
+            # Get all query term tokens existing in original document
+            q_term_inj_idxs = []
+            q_term_non_inj_idxs = []
+    
+            for query_tokens in full_q_tok_list:
+                inj_tok_idxs = []
+                non_inj_tok_idxs = []
+
+                # strict query term matching
+                for i in range(og_doc_start_idx, og_doc_end_idx - len(selected_term_toks) + 1):
+                    window = label[i:i+len(query_tokens)]
+                    if window == query_tokens:
+                        window_range = range(i, i+len(query_tokens))
+            
+                        if window == selected_term_toks:
+                            inj_tok_idxs = inj_tok_idxs + [*window_range]
+                        else:
+                            non_inj_tok_idxs = non_inj_tok_idxs + [*window_range]
+
+                q_term_inj_idxs = q_term_inj_idxs + inj_tok_idxs
+                q_term_non_inj_idxs = q_term_non_inj_idxs + non_inj_tok_idxs
+
+            if not q_term_inj_idxs:
+                q_term_inj_toks = np.zeros((result.shape[0], result.shape[1], 1))
+                inj_toks = np.zeros((result.shape[0], result.shape[1], 1))
+            else:
+                # in TFC1-R, there are no occurences of the selected query term that are not injected
+                inj_toks = np.mean(result[:,:,q_term_inj_idxs], axis=-1)[:,:,np.newaxis] # shape: (n_components, n_layers, 1)
+                q_term_inj_toks = np.zeros((result.shape[0], result.shape[1], 1))
+
+            if not q_term_non_inj_idxs:
+                q_term_non_inj_toks = np.zeros((result.shape[0], result.shape[1], 1))
+            else:
+                q_term_non_inj_toks = np.mean(result[:,:,q_term_non_inj_idxs], axis=-1)[:,:,np.newaxis]
+
+            # Calculate all non query term tokens
+            all_doc_idxs = list(range(og_doc_start_idx, len(label)))
+            non_q_term_idxs = list(set(all_doc_idxs) - set(q_term_non_inj_idxs) - set(q_term_inj_idxs))
+            non_q_term_toks = np.mean(result[:,:,non_q_term_idxs], axis=-1)[:,:,np.newaxis] # shape: (n_components, n_layers, 1)
         
         elif args.dataset == "TFC2":  # New TFC2 logic
 
@@ -725,7 +766,7 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Plot results.")
-    parser.add_argument("--dataset", default="TFC2", choices=["TFC1-I", "TFC1-R", "TFC2"])
+    parser.add_argument("--dataset", default="TFC1-R", choices=["TFC1-I", "TFC1-R", "TFC2"])
     parser.add_argument("--experiment_type", default="block", choices=["block", "head_all", "head_pos", "head_attn", "labels"], 
                         help="What will be patched (e.g., block).")
     parser.add_argument("--perturb_type", default="append", choices=["append", "prepend"], 
