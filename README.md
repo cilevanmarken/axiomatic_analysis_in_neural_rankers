@@ -80,8 +80,6 @@ python create_datasets.py --dataset DATASET --TFC1_I_perturb_type TFC1_I_PERTURB
 
 ## Experiments
 
-To reproduce the experiments in the papers, first [download the data from Google Drive](https://drive.google.com/file/d/1duqXgx2iqPyoom0Nui3nwy33rqjt5pll/view?usp=drive_link). 
-
 To run the patching experiments:
 
 ```
@@ -89,6 +87,13 @@ python experiment.py --dataset DATASET --experiment_type EXPERIMENT_TYPE --TFC1_
 ```
 
 The patching experiments are currently designed to be run on a single GPU, and depending on the experiment, can take several hours to days to complete. To save time, we would suggest setting up separate jobs for each type of patching experiment.
+
+`EXPERIMENT_TYPE`:
+- block: patch blocks for each layer over individual token positions (residual stream, attention block, MLP)
+- head_all: patch individual attention heads over all token positions
+- head_pos: patch target attention heads over individual token positions
+- head_attn: get attention head patterns for target heads
+- labels: get tokenized documents
 
 
 ## Visualization
