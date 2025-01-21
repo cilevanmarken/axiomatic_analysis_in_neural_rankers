@@ -7,14 +7,12 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 import random
-import glob
 import argparse
 
 from functools import partial
 import transformer_lens.utils as utils
 from transformer_lens import patching
 from jaxtyping import Float
-from itertools import product
 from datetime import datetime
 
 from helpers import (
@@ -42,7 +40,7 @@ def run_experiment(args):
             - head_all : patches all attention heads individually across all tokens
             - head_pos : patches all attention heads individualls across individual tokens
             - labels : generates the tokenized documents
-        - args.perturb_type : 
+        - args.TFC1_I_perturb_type : 
             - prepend : additional term is injected at the beginning of the document
             - append : additional term is injected at the end of the document
         - args.reduced_dataset : whether to use a reduced dataset
@@ -59,19 +57,19 @@ def run_experiment(args):
     torch.manual_seed(args.seed)
 
     # create folder structure to save results
-    os.makedirs(f"{args.logging_folder}/results/{args.perturb_type}", exist_ok=True)
-    os.makedirs(f"{args.logging_folder}/results_head_decomp/{args.perturb_type}", exist_ok=True)
-    os.makedirs(f"{args.logging_folder}/results_attn_pattern/{args.perturb_type}", exist_ok=True)
+    os.makedirs(f"{args.logging_folder}/results/{args.TFC1_I_perturb_type}", exist_ok=True)
+    os.makedirs(f"{args.logging_folder}/results_head_decomp/{args.TFC1_I_perturb_type}", exist_ok=True)
+    os.makedirs(f"{args.logging_folder}/results_attn_pattern/{args.TFC1_I_perturb_type}", exist_ok=True)
 
     if args.dataset == "TFC2":
-        os.makedirs(f"{args.logging_folder}/results/{args.perturb_type}/{args.TFC2_K}", exist_ok=True)
-        os.makedirs(f"{args.logging_folder}/results_head_decomp/{args.perturb_type}/{args.TFC2_K}", exist_ok=True)
-        os.makedirs(f"{args.logging_folder}/results_attn_pattern/{args.perturb_type}/{args.TFC2_K}", exist_ok=True)
+        os.makedirs(f"{args.logging_folder}/results/{args.TFC1_I_perturb_type}/{args.TFC2_K}", exist_ok=True)
+        os.makedirs(f"{args.logging_folder}/results_head_decomp/{args.TFC1_I_perturb_type}/{args.TFC2_K}", exist_ok=True)
+        os.makedirs(f"{args.logging_folder}/results_attn_pattern/{args.TFC1_I_perturb_type}/{args.TFC2_K}", exist_ok=True)
 
     # Load files
     if args.dataset == "TFC1-I":
-        baseline_path = f"data/{args.dataset}/TFC1-I_{args.perturb_type}_baseline.json"
-        perturbed_path = f"data/{args.dataset}/TFC1-I_{args.perturb_type}_corpus.json"
+        baseline_path = f"data/{args.dataset}/TFC1-I_{args.TFC1_I_perturb_type}_baseline.json"
+        perturbed_path = f"data/{args.dataset}/TFC1-I_{args.TFC1_I_perturb_type}_corpus.json"
     elif args.dataset == "TFC1-R":
         # baseline is expected to rank higher, so we use the reverse
         baseline_path = f"data/{args.dataset}/TFC1-R_corpus.json"
@@ -79,8 +77,11 @@ def run_experiment(args):
     elif args.dataset == "TFC2":
         baseline_path = f"data/{args.dataset}/TFC2_{args.TFC2_K}_baseline.json"
         perturbed_path = f"data/{args.dataset}/TFC2_{args.TFC2_K}_corpus.json"
+    elif args.dataset == "test":
+        baseline_path = f"data/og_data/tfc1_add_baseline_final_dd_corpus.json"
+        perturbed_path = f"data/{args.dataset}/TFC1-I_append_corpus.json"
     
-    # tfc1_precomputed_scores = pd.read_csv(os.path.join(fbase_path, "tfc1_add_{}_target_qids_scores.csv".format(args.perturb_type)))
+    # tfc1_precomputed_scores = pd.read_csv(os.path.join(fbase_path, "tfc1_add_{}_target_qids_scores.csv".format(args.TFC1_I_perturb_type)))
     tfc1_add_queries = pd.read_csv(os.path.join("data", "QIDs_with_text.csv"), header=None, names=["_id", "text"])
     tfc1_add_baseline_corpus = load_json_file(baseline_path)["corpus"]
     tfc1_add_dd_corpus = load_json_file(perturbed_path)["corpus"]
@@ -95,13 +96,13 @@ def run_experiment(args):
     tokenizer, _, tl_model = load_tokenizer_and_models(pre_trained_model_name, device)
 
     # create pd dataframe from nested dict
-    if args.skip_already_computed:
-        if args.dataset == "TFC2":
-            computed_results = pd.read_csv(f"data/{args.dataset}/computed_results_{args.perturb_type}_{args.TFC2_K}.csv")
-        else:
-            computed_results = pd.read_csv(f"data/{args.dataset}/computed_results_{args.perturb_type}.csv")
-    else:
-        computed_results = create_df_from_nested_dict(tfc1_add_dd_corpus)
+    # if args.skip_already_computed:
+    #     if args.dataset == "TFC2":
+    #         computed_results = pd.read_csv(f"data/{args.dataset}/computed_results_{args.TFC1_I_perturb_type}_{args.TFC2_K}.csv")
+    #     else:
+    #         computed_results = pd.read_csv(f"data/{args.dataset}/computed_results_{args.TFC1_I_perturb_type}.csv")
+    # else:
+    computed_results = create_df_from_nested_dict(tfc1_add_dd_corpus)
 
     # Preprocess queries
     queries_dataloader = preprocess_queries(tfc1_add_queries, tokenizer)
@@ -131,12 +132,12 @@ def run_experiment(args):
             print(f"QUERY @ {i}, DOC @ {j}")
             try:
 
-                # skip if already computed
-                if args.skip_already_computed:
-                    mask = (computed_results['qid'] == str(qid)) & (computed_results['doc_id'] == str(batch["_id"][0]))
-                    if not computed_results[mask].empty:
-                        print(f"Skipping query {qid} and doc {batch['_id'][0]}")
-                        continue
+                # # skip if already computed
+                # if args.skip_already_computed:
+                #     mask = (computed_results['qid'] == str(qid)) & (computed_results['doc_id'] == str(batch["_id"][0]))
+                #     if not computed_results[mask].empty:
+                #         print(f"Skipping query {qid} and doc {batch['_id'][0]}")
+                #         continue
 
                 # Get baseline doc
                 doc_id = batch["_id"][0]
@@ -161,13 +162,13 @@ def run_experiment(args):
 
                 # Hacky thing b/c of the way the diagnostic dataset was created (it was originally created just for prepend)
                 # So will always need to adjust the tokens for append
-                if args.perturb_type == "append":
+                if args.TFC1_I_perturb_type == "append":
                     filler_tokens = torch.full((adj_n+1,), baseline_tokens["input_ids"][0][1]) # skip CLS token
                     filler_attn_mask = torch.full((adj_n+1,), baseline_tokens["attention_mask"][0][1]) 
                     adj_doc = torch.cat((baseline_tokens["input_ids"][0][2:-1], filler_tokens))
                     baseline_tokens["input_ids"] = torch.cat((cls_tok.view(1), adj_doc, sep_tok.view(1)), dim=0).view(1,-1)
                     baseline_tokens["attention_mask"] = torch.cat((baseline_tokens["attention_mask"][0][1:], filler_attn_mask), dim=0).view(1,-1)
-                elif args.perturb_type == "prepend":
+                elif args.TFC1_I_perturb_type == "prepend":
                     # But for prepend, we only need to adjust if the lengths are different
                     if p_len != b_len:
                         filler_tokens = torch.full((adj_n,), baseline_tokens["input_ids"][0][1]) # skip CLS token
@@ -187,7 +188,6 @@ def run_experiment(args):
 
                 # Get scores for baseline and perturbed documents
                 baseline_score = torch.matmul(q_embedding, baseline_embedding.t())
-                # NOTE: this is precomputed, 
                 # perturbed_score = torch.tensor(tfc1_precomputed_scores[(tfc1_precomputed_scores["qid"] == qid) & (tfc1_precomputed_scores["doc_id"] == int(doc_id))]["p_score"].item())
                 perturbed_score = torch.matmul(q_embedding, perturbed_embedding.t())
 
@@ -210,9 +210,9 @@ def run_experiment(args):
                 # Patch after each layer (residual stream, attention, MLPs)
                 if args.experiment_type == "block":
                     if args.dataset == "TFC2":
-                        result_file = f"{args.logging_folder}/results/{args.perturb_type}/{args.TFC2_K}/{qid}_{doc_id}_block.npy"
+                        result_file = f"{args.logging_folder}/results/{args.TFC1_I_perturb_type}/{args.TFC2_K}/{qid}_{doc_id}_block.npy"
                     else:
-                        result_file = f"{args.logging_folder}/results/{args.perturb_type}/{qid}_{doc_id}_block.npy"
+                        result_file = f"{args.logging_folder}/results/{args.TFC1_I_perturb_type}/{qid}_{doc_id}_block.npy"
 
                     # skip if already computed
                     if args.skip_already_computed and os.path.exists(result_file):
@@ -233,9 +233,9 @@ def run_experiment(args):
                 # Patch attention heads
                 elif args.experiment_type == "head_all":
                     if args.dataset == "TFC2":
-                        result_file = f"{args.logging_folder}/results_head_decomp/{args.perturb_type}/{args.TFC2_K}/{qid}_{doc_id}_head.npy"
+                        result_file = f"{args.logging_folder}/results_head_decomp/{args.TFC1_I_perturb_type}/{args.TFC2_K}/{qid}_{doc_id}_head.npy"
                     else:
-                        result_file = f"{args.logging_folder}/results_head_decomp/{args.perturb_type}/{qid}_{doc_id}_head.npy"
+                        result_file = f"{args.logging_folder}/results_head_decomp/{args.TFC1_I_perturb_type}/{qid}_{doc_id}_head.npy"
 
                     # skip if already computed
                     if args.skip_already_computed and os.path.exists(result_file):
@@ -257,9 +257,9 @@ def run_experiment(args):
                 elif args.experiment_type == "head_pos":
                     if args.dataset == "TFC2":
                         raise NotImplementedError("TFC2 not implemented for head_attn, do not know which heads are important")
-                        result_file = f"{args.logging_folder}/results_head_decomp/{args.perturb_type}/{args.TFC2_K}/{qid}_{doc_id}_head_by_pos.npy"
+                        result_file = f"{args.logging_folder}/results_head_decomp/{args.TFC1_I_perturb_type}/{args.TFC2_K}/{qid}_{doc_id}_head_by_pos.npy"
                     else:
-                        result_file = f"{args.logging_folder}/results_head_decomp/{args.perturb_type}/{qid}_{doc_id}_head_by_pos.npy"
+                        result_file = f"{args.logging_folder}/results_head_decomp/{args.TFC1_I_perturb_type}/{qid}_{doc_id}_head_by_pos.npy"
 
                     # skip if already computed
                     if args.skip_already_computed and os.path.exists(result_file):
@@ -287,9 +287,9 @@ def run_experiment(args):
 
                         if args.dataset == "TFC2":
                             raise NotImplementedError("TFC2 not implemented for head_attn, do not know which heads are important")
-                            if args.save: np.save(f"{args.logging_folder}/results_attn_pattern/{args.perturb_type}/{args.TFC2_K}/{qid}_{doc_id}_{layer}_{head}_attn_pattern.npy", attn_pattern)
+                            if args.save: np.save(f"{args.logging_folder}/results_attn_pattern/{args.TFC1_I_perturb_type}/{args.TFC2_K}/{qid}_{doc_id}_{layer}_{head}_attn_pattern.npy", attn_pattern)
                         else:
-                            if args.save: np.save(f"{args.logging_folder}/results_attn_pattern/{args.perturb_type}/{qid}_{doc_id}_{layer}_{head}_attn_pattern.npy", attn_pattern)
+                            if args.save: np.save(f"{args.logging_folder}/results_attn_pattern/{args.TFC1_I_perturb_type}/{qid}_{doc_id}_{layer}_{head}_attn_pattern.npy", attn_pattern)
 
                 
                 elif args.experiment_type == "labels":
@@ -298,21 +298,17 @@ def run_experiment(args):
 
                     if args.save: 
                         if args.dataset == "TFC2":
-                            with open(f"{args.logging_folder}/results/{args.perturb_type}/{args.TFC2_K}/{qid}_{doc_id}_labels.txt", "w", encoding='utf-8') as f:
+                            with open(f"{args.logging_folder}/results/{args.TFC1_I_perturb_type}/{args.TFC2_K}/{qid}_{doc_id}_labels.txt", "w", encoding='utf-8') as f:
                                 for item in labels:
                                     f.write(str(item) + '\n')
                         else:
-                            with open(f"{args.logging_folder}/results/{args.perturb_type}/{qid}_{doc_id}_labels.txt", "w", encoding='utf-8') as f:
+                            with open(f"{args.logging_folder}/results/{args.TFC1_I_perturb_type}/{qid}_{doc_id}_labels.txt", "w", encoding='utf-8') as f:
                                 for item in labels:
                                     f.write(str(item) + '\n')
 
 
             except Exception as e:
                 print(f"ERROR: {e} for query {qid} and document {doc_id}")
-
-            # save intermediate results
-            if args.save_intermediate:
-                computed_results.to_csv(f"temp_intermediate_results.csv", index=False)
 
     # compute results and save
     computed_results['og_rank'] = computed_results.groupby('qid')['og_score'].rank(
@@ -328,36 +324,40 @@ def run_experiment(args):
     computed_results['change_in_rank'] = computed_results['og_rank'] - computed_results['p_rank']
 
     # save
+    if args.experiment_type == "test":
+        computed_results.to_csv("test.csv", index=False)
+        return
+    
     if args.save_intermediate:
         if args.dataset == "TFC2":
-            computed_results.to_csv(f"data/{args.dataset}/computed_results_{args.perturb_type}_{args.TFC2_K}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", index=False)
+            computed_results.to_csv(f"data/{args.dataset}/computed_results_{args.TFC1_I_perturb_type}_{args.TFC2_K}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", index=False)
         else:
-            computed_results.to_csv(f"data/{args.dataset}/computed_results_{args.perturb_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", index=False)
+            computed_results.to_csv(f"data/{args.dataset}/computed_results_{args.TFC1_I_perturb_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", index=False)
 
     return
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run activation patching with the specific patching experiment and perturbation types.")
     parser.add_argument("--dataset", default="TFC2", choices=["TFC1-I", "TFC1-R", "TFC2"])
-    parser.add_argument("--experiment_type", default="block", choices=["block", "head_all", "head_pos", "head_attn", "labels"], 
+    parser.add_argument("--experiment_type", default="block", choices=["block", "head_all", "head_pos", "head_attn", "labels", "test"], 
                         help="What will be patched (e.g., block).")
-    parser.add_argument("--perturb_type", default="append", choices=["append", "prepend"], 
+    parser.add_argument("--TFC1_I_perturb_type", default="append", choices=["append", "prepend"], 
                         help="The perturbation to apply (e.g., append).")
-    parser.add_argument("--TFC2_K", default=5, type=int, choices=[1, 2, 5, 10, 50], help="K")
-    parser.add_argument("--save_intermediate", default=True, help="Save intermediate results.")
+    parser.add_argument("--TFC2_K", default=50, type=int, choices=[1, 2, 5, 10, 50], help="K")
+    parser.add_argument("--save_intermediate", default=False, help="Save intermediate results.")
     
     # reduced dataset
     parser.add_argument("--reduced_dataset", default=False, action='store_true',
                         help="Whether to use a reduced dataset.")
     parser.add_argument("--n_queries", type=int, default=1, 
                         help="Number of queries to use if using a reduced dataset.")
-    parser.add_argument("--n_docs", type=int, default=3, 
+    parser.add_argument("--n_docs", type=int, default=1, 
                         help="Number of documents to use if using a reduced dataset.")
     
     # reproducibility
     parser.add_argument("--seed", default=42, type=int, help="Random seed.")
     parser.add_argument("--skip_already_computed", default=True, action='store_true', help="Do not overwrite already computed files and do not recompute results.")
-    parser.add_argument("--save", default=True, help="Save results.")
+    parser.add_argument("--save", default=False, help="Save results.")
 
     args = parser.parse_args()
 
