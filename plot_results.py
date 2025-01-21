@@ -6,20 +6,14 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-import imgkit
-
-from transformers import AutoTokenizer
-
 import plotly.graph_objs as go
 import plotly.subplots as sp
-import plotly.io as pio
-
-
 import os
 import glob
 import json
-import csv
 import argparse
+from transformers import AutoTokenizer
+
 
 def load_jsonl_file_into_dict(fname):
     data = {}
@@ -63,6 +57,11 @@ def load_doc_results_by_rank(scores_fname, result_type, results_path, labels_pat
     scores = pd.read_csv(scores_fname, usecols=["qid", "doc_id", rank_type])
     filtered_scores = scores[scores[rank_type].isin(list(range(rank_start, rank_end+1)))]
     target_docs = list(filtered_scores[["qid","doc_id"]].to_records(index=False))
+
+    # NOTE: check top 10 docs per K
+    for qid in filtered_scores["qid"].unique():
+        print(filtered_scores[filtered_scores["qid"] == qid].sort_values(by="og_rank").head(10))
+        quit()
 
     # Load files
     results, labels, qids = [], [], []
@@ -485,6 +484,20 @@ def segment_tokens_all(data, labels, qids, perturb_type, full_q_dict, selected_t
             all_doc_idxs = list(range(og_doc_start_idx, len(label)))
             non_q_term_idxs = list(set(all_doc_idxs) - set(q_term_non_inj_idxs) - set(q_term_inj_idxs))
             non_q_term_toks = np.mean(result[:,:,non_q_term_idxs], axis=-1)[:,:,np.newaxis] # shape: (n_components, n_layers, 1)
+
+            # # check if segmentation makes sense
+            # print(f"Full label: {label}")
+            # print()
+            # print(f"Full query: {full_q}")
+            # print()
+            # print(f"Og label: {label[:og_doc_end_idx]}")
+            # print()
+            # print(f"Injected: {[label[x] for x in q_term_inj_idxs]}")
+            # print()
+            # print(f"Query terms not matching injected: {[label[x] for x in q_term_non_inj_idxs]}")
+            # print()
+            # print(f"Non query terms: {[label[x] for x in non_q_term_idxs]}")
+            # quit()
         
         elif args.dataset == "TFC2":  # New TFC2 logic
 
@@ -568,14 +581,15 @@ def plot_blocks_plotly(data, labels, save_path):
     # NOTE: normalize data, 2 options
     max_abs_val = max(abs(data.min()), abs(data.max()))
     normalized_data = data / max_abs_val
-    # normalized_data = data / (args.TFC2_K + 1)
+    normalized_data = data / (args.TFC2_K + 1)
+    max_norm_data = np.max(np.abs(normalized_data))
 
     fig = sp.make_subplots(rows=1, cols=3, subplot_titles=['Residual Stream', 'Attn Output', 'MLP Output'], shared_yaxes=True, horizontal_spacing=0.1)
 
     # Create heatmaps for each experiment
     for i in range(3):
         heatmap_data = normalized_data[i, :, :]
-        heatmap = go.Heatmap(z=heatmap_data, colorscale='RdBu', zmin=-1, zmax=1)
+        heatmap = go.Heatmap(z=heatmap_data, colorscale='RdBu', zmin=-max_norm_data, zmax=max_norm_data) #zmin=-1, zmax=1
         fig.add_trace(heatmap, row=1, col=i+1)
 
     fig.update_layout(
@@ -601,17 +615,19 @@ def plot_blocks_plotly(data, labels, save_path):
 
 def plot_heads(data, save_path):
 
+    # NOTE: normalize data, 2 options
     max_abs_val = max(abs(data.min()), abs(data.max()))
-    normalized_data = data / max_abs_val
+    # normalized_data = data / max_abs_val
+    normalized_data = data / (args.TFC2_K + 1)
+    max_norm_data = np.max(np.abs(normalized_data))
 
-    print(max_abs_val)
 
     plt.figure(figsize=(10, 6))
     sns.heatmap(
         normalized_data,
         cmap='RdBu',
-        vmin=-1,
-        vmax=1,
+        vmin=-max_norm_data, #-1,
+        vmax=max_norm_data, #1,
         xticklabels=True,
         yticklabels=True,
         annot=True,
@@ -654,17 +670,17 @@ def grouped_bar_chart(data_array, heads, label_segs, save_path=None):
 def main(args):
 
     # setup
-    perturb_type = args.perturb_type
+    perturb_type = args.TFC1_I_perturb_type
     plot = [args.experiment_type]
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     os.makedirs(f"figures/{args.dataset}", exist_ok=True)
     labels = ["[CLS]", "injected tokens", "query tokens matching injected", "query tokens not matching injected", "non query tokens", "[SEP]"]
     if args.dataset == "TFC2":
-        scores_csv_path = f"data/{args.dataset}/computed_results_{args.perturb_type}_{args.TFC2_K}.csv"
-        folder_suffix = f"/{args.perturb_type}/{args.TFC2_K}"
+        scores_csv_path = f"data/{args.dataset}/computed_results_{args.TFC1_I_perturb_type}_{args.TFC2_K}.csv"
+        folder_suffix = f"/{args.TFC1_I_perturb_type}/{args.TFC2_K}"
     else:
-        scores_csv_path = f"data/{args.dataset}/computed_results_{args.perturb_type}.csv"
-        folder_suffix = f"/{args.perturb_type}/"
+        scores_csv_path = f"data/{args.dataset}/computed_results_{args.TFC1_I_perturb_type}.csv"
+        folder_suffix = f"/{args.TFC1_I_perturb_type}/"
 
     # Load tokenizer
     print("loading tokenizer")
@@ -679,7 +695,7 @@ def main(args):
         print("plotting all block results")
         all_block_results,  all_block_labels, all_block_qids, _ = load_all_results("block", f"{args.results_folder}/results/{folder_suffix}")
         all_block_segmented = segment_tokens_all(all_block_results, all_block_labels, all_block_qids, perturb_type, full_query_dict, selected_terms_dict, tokenizer, args)
-        _ = plot_blocks_plotly(all_block_segmented, labels, f"{args.figure_folder}/normed_all_block_seg.png")
+        _ = plot_blocks_plotly(all_block_segmented, labels, f"{args.figure_folder}/divK_normed_all_block_seg.png")
 
     
     if "head_all" in plot:
@@ -695,7 +711,7 @@ def main(args):
             rank_end=10
         )
         avg_top_ranked_doc_head_results = np.mean(top_ranked_doc_head_results, axis=0)
-        _ = plot_heads(avg_top_ranked_doc_head_results, f"{args.figure_folder}/top_ranked_doc_head_results.png")
+        _ = plot_heads(avg_top_ranked_doc_head_results, f"{args.figure_folder}/divK_top_ranked_doc_head_results.png")
 
         print("plotting head results for bottom ranked documents")
         bottom_ranked_doc_head_results, _, _ = load_doc_results_by_rank(
@@ -707,7 +723,7 @@ def main(args):
             rank_end=100
         )
         avg_bottom_ranked_doc_head_results = np.mean(bottom_ranked_doc_head_results, axis=0)
-        _ = plot_heads(avg_bottom_ranked_doc_head_results, f"{args.figure_folder}/bottom_ranked_doc_head_results.png")
+        _ = plot_heads(avg_bottom_ranked_doc_head_results, f"{args.figure_folder}/divK_bottom_ranked_doc_head_results.png")
 
 
     if "head_pos" in plot:
@@ -751,9 +767,9 @@ def main(args):
             tokenizer
         )
         labels = ["inj to qterm+", "qterm+ to inj", "inj to qterm-", "inj to sep", "other to sep"]
-        _ = grouped_bar_chart(head_data[0], heads, labels, save_path=f"figures/{args.dataset}/head_attn_pattern_{perturb_type}_overall.png")
-        _ = grouped_bar_chart(head_data[1], heads, labels, save_path=f"figures/{args.dataset}/head_attn_pattern_{perturb_type}_exists.png")
-        _ = grouped_bar_chart(head_data[2], heads, labels, save_path=f"figures/{args.dataset}/head_attn_pattern_{perturb_type}_not_exists.png")
+        _ = grouped_bar_chart(head_data[0], heads, labels, save_path=f"{args.figure_folder}/head_attn_pattern_{perturb_type}_overall.png")
+        _ = grouped_bar_chart(head_data[1], heads, labels, save_path=f"{args.figure_folder}/head_attn_pattern_{perturb_type}_exists.png")
+        _ = grouped_bar_chart(head_data[2], heads, labels, save_path=f"{args.figure_folder}/head_attn_pattern_{perturb_type}_not_exists.png")
 
     return
 
@@ -761,9 +777,9 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Plot results.")
     parser.add_argument("--dataset", default="TFC2", choices=["TFC1-I", "TFC1-R", "TFC2"])
-    parser.add_argument("--experiment_type", default="block", choices=["block", "head_all", "head_pos", "head_attn", "labels"], 
+    parser.add_argument("--experiment_type", default="head_all", choices=["block", "head_all", "head_pos", "head_attn", "labels"], 
                         help="What will be patched (e.g., block).")
-    parser.add_argument("--perturb_type", default="append", choices=["append", "prepend"], 
+    parser.add_argument("--TFC1_I_perturb_type", default="append", choices=["append", "prepend"], 
                         help="The perturbation to apply (e.g., append).")
     parser.add_argument("--TFC2_K", default=10, type=int, choices=[1, 2, 5, 10, 50], help="K")
     args = parser.parse_args()
@@ -772,7 +788,7 @@ if __name__ == "__main__":
     if args.dataset == "TFC2":
         args.figure_folder = f"figures/{args.dataset}/{args.TFC2_K}"
     elif args.dataset == "TFC1-I":
-        args.figure_folder = f"figures/{args.dataset}/{args.perturb_type}"
+        args.figure_folder = f"figures/{args.dataset}/{args.TFC1_I_perturb_type}"
     elif args.dataset == "TFC1-R":
         args.figure_folder = f"figures/{args.dataset}/"
     args.results_folder = f"results/{args.dataset}"
