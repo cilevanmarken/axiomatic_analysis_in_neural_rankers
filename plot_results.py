@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+import imgkit
 
 from transformers import AutoTokenizer
 
@@ -60,7 +61,6 @@ def load_doc_results_by_rank(scores_fname, result_type, results_path, labels_pat
 
     # Get query, doc ids
     scores = pd.read_csv(scores_fname, usecols=["qid", "doc_id", rank_type])
-    # filtered_scores = scores[scores[rank_type] == rank]
     filtered_scores = scores[scores[rank_type].isin(list(range(rank_start, rank_end+1)))]
     target_docs = list(filtered_scores[["qid","doc_id"]].to_records(index=False))
 
@@ -535,6 +535,10 @@ def segment_tokens_all(data, labels, qids, perturb_type, full_q_dict, selected_t
             non_q_term_toks = np.mean(result[:,:,non_q_term_idxs], axis=-1)[:,:,np.newaxis] # shape: (n_components, n_layers, 1)
 
             # # check if segmentation makes sense
+            # print(f"Full label: {label}")
+            # print()
+            # print(f"Full query: {full_q}")
+            # print()
             # print(f"Og label: {label[:og_doc_end_idx]}")
             # print()
             # print(f"Inject tokens: {label[inj_toks_start_idx:inj_toks_end_idx]}")
@@ -560,11 +564,17 @@ def segment_tokens_all(data, labels, qids, perturb_type, full_q_dict, selected_t
 
 
 def plot_blocks_plotly(data, labels, save_path):
+
+    # NOTE: normalize data, 2 options
+    max_abs_val = max(abs(data.min()), abs(data.max()))
+    normalized_data = data / max_abs_val
+    # normalized_data = data / (args.TFC2_K + 1)
+
     fig = sp.make_subplots(rows=1, cols=3, subplot_titles=['Residual Stream', 'Attn Output', 'MLP Output'], shared_yaxes=True, horizontal_spacing=0.1)
 
     # Create heatmaps for each experiment
     for i in range(3):
-        heatmap_data = data[i, :, :]
+        heatmap_data = normalized_data[i, :, :]
         heatmap = go.Heatmap(z=heatmap_data, colorscale='RdBu', zmin=-1, zmax=1)
         fig.add_trace(heatmap, row=1, col=i+1)
 
@@ -590,9 +600,15 @@ def plot_blocks_plotly(data, labels, save_path):
 '''
 
 def plot_heads(data, save_path):
+
+    max_abs_val = max(abs(data.min()), abs(data.max()))
+    normalized_data = data / max_abs_val
+
+    print(max_abs_val)
+
     plt.figure(figsize=(10, 6))
     sns.heatmap(
-        data,
+        normalized_data,
         cmap='RdBu',
         vmin=-1,
         vmax=1,
@@ -658,65 +674,50 @@ def main(args):
     # Load full queries and selected terms
     full_query_dict, selected_terms_dict = load_queries("data/queries.jsonl", f"data/selected_query_terms.csv") 
     
-    if "block" in plot:
+    if "block" in plot:   
         # Load, segment, and plot average block results
         print("plotting all block results")
         all_block_results,  all_block_labels, all_block_qids, _ = load_all_results("block", f"{args.results_folder}/results/{folder_suffix}")
         all_block_segmented = segment_tokens_all(all_block_results, all_block_labels, all_block_qids, perturb_type, full_query_dict, selected_terms_dict, tokenizer, args)
-        _ = plot_blocks_plotly(all_block_segmented, labels, f"figures/{args.dataset}/{perturb_type}_all_block_seg.png")
+        _ = plot_blocks_plotly(all_block_segmented, labels, f"{args.figure_folder}/normed_all_block_seg.png")
 
     
     if "head_all" in plot:
         #  Load and plot head results for top/bottom ranked documents
         print("plotting head results for top ranked documents")
-        if args.dataset == "TFC2":
-            results_path = f"{args.results_folder}/results_head_decomp/{args.perturb_type}/{args.TFC2_K}"
-            top_save_path = f"figures/{args.dataset}/top_ranked_doc_head_results_{args.perturb_type}_{args.TFC2_K}.png"
-            bottom_save_path = f"figures/{args.dataset}/bottom_ranked_doc_head_results_{args.perturb_type}_{args.TFC2_K}.png"
-        else:
-            results_path = f"{args.results_folder}/results_head_decomp/{args.perturb_type}"
-            top_save_path = f"figures/{args.dataset}/top_ranked_doc_head_results_{args.perturb_type}.png"
-            bottom_save_path = f"figures/{args.dataset}/bottom_ranked_doc_head_results_{args.perturb_type}.png"
 
         top_ranked_doc_head_results, _, _ = load_doc_results_by_rank(
             scores_csv_path, 
             "head", 
-            results_path, 
-            results_path, 
+            f"{args.results_folder}/results_head_decomp/{folder_suffix}", 
+            f"{args.results_folder}/results_head_decomp/{folder_suffix}", 
             rank_start=1, 
             rank_end=10
         )
         avg_top_ranked_doc_head_results = np.mean(top_ranked_doc_head_results, axis=0)
-        _ = plot_heads(avg_top_ranked_doc_head_results, top_save_path)
+        _ = plot_heads(avg_top_ranked_doc_head_results, f"{args.figure_folder}/top_ranked_doc_head_results.png")
 
         print("plotting head results for bottom ranked documents")
         bottom_ranked_doc_head_results, _, _ = load_doc_results_by_rank(
             scores_csv_path, 
             "head", 
-            results_path, 
-            results_path, 
+            f"{args.results_folder}/results_head_decomp/{folder_suffix}", 
+            f"{args.results_folder}/results_head_decomp/{folder_suffix}", 
             rank_start=91, 
             rank_end=100
         )
         avg_bottom_ranked_doc_head_results = np.mean(bottom_ranked_doc_head_results, axis=0)
-        _ = plot_heads(avg_bottom_ranked_doc_head_results, bottom_save_path)
+        _ = plot_heads(avg_bottom_ranked_doc_head_results, f"{args.figure_folder}/bottom_ranked_doc_head_results.png")
 
 
     if "head_pos" in plot:
-
-        if args.dataset == "TFC2":
-            head_decomp_results_path = f"{args.results_folder}/results_head_decomp/{args.perturb_type}/{args.TFC2_K}"
-            results_path = f"{args.results_folder}/results/{args.perturb_type}/{args.TFC2_K}"
-        else:
-            head_decomp_results_path = f"{args.results_folder}/results_head_decomp/{args.perturb_type}"
-            results_path = f"{args.results_folder}/results/{args.perturb_type}"
 
         # head patching and attention patterns for top ranked documents by position
         heads = [(0,9), (1,6), (2,3), (3,8)]
         scores_df = pd.read_csv(scores_csv_path)
         head_decomp_data = load_head_decomp_by_rank(
-            head_decomp_results_path,
-            results_path, 
+            f"{args.results_folder}/results_head_decomp/{folder_suffix}",
+            f"{args.results_folder}/results/{folder_suffix}", 
             perturb_type, 
             scores_df, 
             heads, 
@@ -727,26 +728,19 @@ def main(args):
             tokenizer
         )
         labels = ["cls", "inj", "q_term_inj", "q_term_non_inj", "non_q_term", "sep"]
-        _ = grouped_bar_chart(head_decomp_data[0].T, heads, labels, save_path=f"figures/{args.dataset}/head_decomp_top_heads_{perturb_type}_overall.png")
-        _ = grouped_bar_chart(head_decomp_data[1].T, heads, labels, save_path=f"figures/{args.dataset}/head_decomp_top_heads_{perturb_type}_exists.png")
-        _ = grouped_bar_chart(head_decomp_data[2].T, heads, labels, save_path=f"figures/{args.dataset}/head_decomp_top_heads_{perturb_type}_not_exists.png")
+        _ = grouped_bar_chart(head_decomp_data[0].T, heads, labels, save_path=f"{args.figure_folder}/head_decomp_top_heads_overall.png")
+        _ = grouped_bar_chart(head_decomp_data[1].T, heads, labels, save_path=f"{args.figure_folder}/head_decomp_top_heads_exists.png")
+        _ = grouped_bar_chart(head_decomp_data[2].T, heads, labels, save_path=f"{args.figure_folder}/head_decomp_top_heads_not_exists.png")
 
 
     if "head_attn" in plot:
-
-        if args.dataset == "TFC2":
-            head_attn_results_path = f"{args.results_folder}/results_attn_pattern/{args.perturb_type}/{args.TFC2_K}"
-            results_path = f"{args.results_folder}/results/{args.perturb_type}/{args.TFC2_K}"
-        else:
-            head_attn_results_path = f"{args.results_folder}/results_attn_pattern/{args.perturb_type}"
-            results_path = f"{args.results_folder}/results/{args.perturb_type}"
     
         print("plotting head attention")
         heads = [(0,9), (1,6), (2,3), (3,8)]
         scores_df = pd.read_csv(scores_csv_path)
         head_data = load_head_pattern_by_rank(
-            head_attn_results_path, 
-            results_path, 
+            f"{args.results_folder}/results_attn_pattern/{folder_suffix}", 
+            f"{args.results_folder}/results/{folder_suffix}", 
             perturb_type, 
             scores_df, 
             heads, 
@@ -766,16 +760,23 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Plot results.")
-    parser.add_argument("--dataset", default="TFC1-R", choices=["TFC1-I", "TFC1-R", "TFC2"])
+    parser.add_argument("--dataset", default="TFC2", choices=["TFC1-I", "TFC1-R", "TFC2"])
     parser.add_argument("--experiment_type", default="block", choices=["block", "head_all", "head_pos", "head_attn", "labels"], 
                         help="What will be patched (e.g., block).")
     parser.add_argument("--perturb_type", default="append", choices=["append", "prepend"], 
                         help="The perturbation to apply (e.g., append).")
-    parser.add_argument("--TFC2_K", default=2, type=int, choices=[1, 2, 5, 10, 50], help="K")
+    parser.add_argument("--TFC2_K", default=10, type=int, choices=[1, 2, 5, 10, 50], help="K")
     args = parser.parse_args()
 
     # non variable args
-    args.results_folder = f"results/{args.dataset}/"
+    if args.dataset == "TFC2":
+        args.figure_folder = f"figures/{args.dataset}/{args.TFC2_K}"
+    elif args.dataset == "TFC1-I":
+        args.figure_folder = f"figures/{args.dataset}/{args.perturb_type}"
+    elif args.dataset == "TFC1-R":
+        args.figure_folder = f"figures/{args.dataset}/"
+    args.results_folder = f"results/{args.dataset}"
+    os.makedirs(args.figure_folder, exist_ok=True)
     args.TFC2_n_filler = 51
 
     _ = main(args)
