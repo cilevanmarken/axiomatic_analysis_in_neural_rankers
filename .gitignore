@@ -1,18 +1,6 @@
 # these folders can be ignored
 data/
 figures*/
-results/
-result_figures/
-results/prepend
-results/append
-results_attn_pattern/
-results_head_decomp/
+results*/
 sketch.py
-new_results_head_decomp/
-new_results/
-all_results/
-TFC1-R_results/
-TFC1-R_results_attn_pattern/
-TFC1-R_results_head_decomp/
-backup_results/
 paper.pdf
