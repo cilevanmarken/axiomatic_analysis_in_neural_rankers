@@ -4,7 +4,7 @@ By Cile van Marken, University of Amsterdam
 
 <!-- This code corresponds to the paper: __Axiomatic Causal Interventions for Reverse Engineering Relevance Computation in Neural Retrieval Models__, in _Proceedings of the 47th International ACM SIGIR Conference on Research and Development in Information Retrieval (SIGIR ’24)_, July 14–18, 2024, Washington, DC, USA. [Link to paper](https://arxiv.org/abs/2405.02503) -->
 
-# Repository
+## Repository
 ```
 ProjAI/
 ├── data/
@@ -36,7 +36,7 @@ ProjAI/
 └── retrieval_patching_demo.py
 ```
 
-# Setup
+## Setup
 To install an environment with all neccesary packages, run the following commands:
 ```
 conda create --name ACI_env python=3.9
@@ -50,15 +50,6 @@ This code uses a copy of the [TransformerLens](https://github.com/neelnanda-io/T
 - `components.py`
 - `loading_from_pretrained.py`
 - `HookedEncoder.py`
-
-
-# Code
-
-A demo of how activation patching for retrieval is performed can be found in `retrieval_patching_demo.py`. 
-
-```
-python retrieval_patching_demo.py
-```
 
 
 ## Data and diagnostic datasets
