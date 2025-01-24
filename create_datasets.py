@@ -165,7 +165,7 @@ if __name__ == "__main__":
                         help="The perturbation to apply (e.g., append).")
     parser.add_argument("--TFC1_I_perturb_type", default="append", choices=["append", "prepend"],
                         help="Wether to add the query term at the beginning or end of the text.")
-    parser.add_argument("--TFC2_K", default=[1, 2, 5, 10, 50], type=int, nargs='+',
+    parser.add_argument("--TFC2_K", default=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 50], type=int, nargs='+',
                         help="The number of words to add to the text.")
 
     args = parser.parse_args()

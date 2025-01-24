@@ -188,7 +188,6 @@ def run_experiment(args):
 
                 # Get scores for baseline and perturbed documents
                 baseline_score = torch.matmul(q_embedding, baseline_embedding.t())
-                # perturbed_score = torch.tensor(tfc1_precomputed_scores[(tfc1_precomputed_scores["qid"] == qid) & (tfc1_precomputed_scores["doc_id"] == int(doc_id))]["p_score"].item())
                 perturbed_score = torch.matmul(q_embedding, perturbed_embedding.t())
 
                 # save these scores
@@ -205,6 +204,9 @@ def run_experiment(args):
                 '''
                 def ranking_metric(patched_doc_embedding, og_score=baseline_score, p_score=perturbed_score):
                     patched_score = torch.matmul(q_embedding, patched_doc_embedding.t())
+                    # if torch.isclose(p_score, og_score):
+                    #     print(f"Warning: p_score ({p_score.item()}) == og_score ({og_score.item()})")
+                    #     return torch.tensor(0.0, device=patched_score.device)  # Handle edge case
                     return (patched_score - og_score) / (p_score - og_score)
                 
                 # Patch after each layer (residual stream, attention, MLPs)
@@ -343,7 +345,7 @@ if __name__ == "__main__":
                         help="What will be patched (e.g., block).")
     parser.add_argument("--TFC1_I_perturb_type", default="append", choices=["append", "prepend"], 
                         help="The perturbation to apply (e.g., append).")
-    parser.add_argument("--TFC2_K", default=50, type=int, choices=[1, 2, 5, 10, 50], help="K")
+    parser.add_argument("--TFC2_K", default=4, type=int, choices=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 50], help="K")
     parser.add_argument("--save_intermediate", default=False, help="Save intermediate results.")
     
     # reduced dataset
@@ -356,11 +358,13 @@ if __name__ == "__main__":
     
     # reproducibility
     parser.add_argument("--seed", default=42, type=int, help="Random seed.")
-    parser.add_argument("--skip_already_computed", default=True, action='store_true', help="Do not overwrite already computed files and do not recompute results.")
-    parser.add_argument("--save", default=False, help="Save results.")
+    parser.add_argument("--skip_already_computed", default=False, action='store_true', help="Do not overwrite already computed files and do not recompute results.")
+    parser.add_argument("--save", default=True, help="Save results.")
 
     args = parser.parse_args()
 
     args.logging_folder = f"./results/{args.dataset}"
     
     _ = run_experiment(args)
+
+# python plot_results.py --dataset TFC1-I --experiment_type block --TFC1_I_perturb_type append; python plot_results.py --dataset TFC1-I --experiment_type block --TFC1_I_perturb_type prepend; python plot_results.py --dataset TFC1-R --experiment_type block;  python plot_results.py --dataset TFC2 --experiment_type block --TFC2_K 1;  python plot_results.py --dataset TFC2 --experiment_type block --TFC2_K 2;  python plot_results.py --dataset TFC2 --experiment_type block --TFC2_K 5;  python plot_results.py --dataset TFC2 --experiment_type block --TFC2_K 10;  python plot_results.py --dataset TFC2 --experiment_type block --TFC2_K 50
