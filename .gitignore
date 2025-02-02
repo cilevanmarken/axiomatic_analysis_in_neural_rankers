@@ -1,5 +1,6 @@
 # these folders can be ignored
 data/
+# figures/
 results*/
 sketch.py
 paper.pdf
