@@ -267,8 +267,10 @@ def run_experiment(args):
                     if args.skip_already_computed and os.path.exists(result_file):
                         print(f"Skipping {qid}_{doc_id}")
                         continue
-
-                    layer_head_list = [(0,9), (1,6), (2,3), (3,8)]
+                    
+                    # NOTE: old attn heads. Reproduction comes up with other heads
+                    # layer_head_list = [(0,9), (1,6), (2,3), (3,8)]
+                    layer_head_list = [(0, 9), (1, 6), (2, 3), (4,0)]
                     act_patch_attn_head_out_by_pos = get_act_patch_attn_head_by_pos(
                         tl_model,
                         device,
@@ -283,7 +285,9 @@ def run_experiment(args):
 
                 # Get attention patterns for head
                 elif args.experiment_type == "head_attn":
-                    attn_heads = [(0,9), (1,6), (2,3), (3,8)]
+                    # NOTE: old attn heads. Reproduction comes up with other heads
+                    # attn_heads = [(0,9), (1,6), (2,3), (3,8)]
+                    attn_heads = [(0, 9), (1, 6), (2, 3), (4,0)]
                     for layer, head in attn_heads:
                         attn_pattern = perturbed_cache["pattern", layer][:,head].mean(0).detach().cpu().numpy()
 
@@ -340,8 +344,8 @@ def run_experiment(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run activation patching with the specific patching experiment and perturbation types.")
-    parser.add_argument("--dataset", default="TFC2", choices=["TFC1-I", "TFC1-R", "TFC2"])
-    parser.add_argument("--experiment_type", default="block", choices=["block", "head_all", "head_pos", "head_attn", "labels", "test"], 
+    parser.add_argument("--dataset", default="TFC1-I", choices=["TFC1-I", "TFC1-R", "TFC2"])
+    parser.add_argument("--experiment_type", default="head_pos", choices=["block", "head_all", "head_pos", "head_attn", "labels", "test"], 
                         help="What will be patched (e.g., block).")
     parser.add_argument("--TFC1_I_perturb_type", default="append", choices=["append", "prepend"], 
                         help="The perturbation to apply (e.g., append).")
