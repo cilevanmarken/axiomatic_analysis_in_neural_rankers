@@ -14,6 +14,7 @@ import json
 import argparse
 from transformers import AutoTokenizer
 
+# plt.rcParams['text.usetex'] = True
 
 def load_jsonl_file_into_dict(fname):
     data = {}
@@ -58,10 +59,10 @@ def load_doc_results_by_rank(scores_fname, result_type, results_path, labels_pat
     filtered_scores = scores[scores[rank_type].isin(list(range(rank_start, rank_end+1)))]
     target_docs = list(filtered_scores[["qid","doc_id"]].to_records(index=False))
 
-    # NOTE: check top 10 docs per K
-    for qid in filtered_scores["qid"].unique():
-        print(filtered_scores[filtered_scores["qid"] == qid].sort_values(by="og_rank").head(10))
-        quit()
+    # # NOTE: check top 10 docs per K
+    # for qid in filtered_scores["qid"].unique():
+    #     print(filtered_scores[filtered_scores["qid"] == qid].sort_values(by="og_rank").head(10))
+    #     quit()
 
     # Load files
     results, labels, qids = [], [], []
@@ -437,8 +438,9 @@ def segment_tokens_all(data, labels, qids, perturb_type, full_q_dict, selected_t
                 
             # Calculate all non query term tokens
             all_doc_idxs = list(range(og_doc_start_idx, len(label)))
-            non_q_term_idxs = list(set(all_doc_idxs) - set(q_term_inj_idxs) - set(q_term_non_inj_idxs))
+            non_q_term_idxs = list(set(all_doc_idxs) - set(q_term_inj_idxs) - set(q_term_non_inj_idxs) - set([len(label) - 1]))
             non_q_term_toks = np.mean(result[:,:,non_q_term_idxs], axis=-1)[:,:,np.newaxis] # shape: (n_components, n_layers, 1)
+
 
         elif args.dataset == "TFC1-R":
 
@@ -467,11 +469,11 @@ def segment_tokens_all(data, labels, qids, perturb_type, full_q_dict, selected_t
                 q_term_inj_idxs = q_term_inj_idxs + inj_tok_idxs
                 q_term_non_inj_idxs = q_term_non_inj_idxs + non_inj_tok_idxs
 
+            # all occurences of the selected query term are injected
             if not q_term_inj_idxs:
                 q_term_inj_toks = np.zeros((result.shape[0], result.shape[1], 1))
                 inj_toks = np.zeros((result.shape[0], result.shape[1], 1))
             else:
-                # in TFC1-R, there are no occurences of the selected query term that are not injected
                 inj_toks = np.mean(result[:,:,q_term_inj_idxs], axis=-1)[:,:,np.newaxis] # shape: (n_components, n_layers, 1)
                 q_term_inj_toks = np.zeros((result.shape[0], result.shape[1], 1))
 
@@ -482,10 +484,9 @@ def segment_tokens_all(data, labels, qids, perturb_type, full_q_dict, selected_t
 
             # Calculate all non query term tokens
             all_doc_idxs = list(range(og_doc_start_idx, len(label)))
-            non_q_term_idxs = list(set(all_doc_idxs) - set(q_term_non_inj_idxs) - set(q_term_inj_idxs))
+            non_q_term_idxs = list(set(all_doc_idxs) - set(q_term_non_inj_idxs) - set(q_term_inj_idxs) - set([len(label) - 1]))
             non_q_term_toks = np.mean(result[:,:,non_q_term_idxs], axis=-1)[:,:,np.newaxis] # shape: (n_components, n_layers, 1)
 
-            # # check if segmentation makes sense
             # print(f"Full label: {label}")
             # print()
             # print(f"Full query: {full_q}")
@@ -494,9 +495,13 @@ def segment_tokens_all(data, labels, qids, perturb_type, full_q_dict, selected_t
             # print()
             # print(f"Injected: {[label[x] for x in q_term_inj_idxs]}")
             # print()
+            # print(f"Query terms matching injected: {[label[x] for x in q_term_non_inj_idxs]}")
+            # print()
             # print(f"Query terms not matching injected: {[label[x] for x in q_term_non_inj_idxs]}")
             # print()
             # print(f"Non query terms: {[label[x] for x in non_q_term_idxs]}")
+            # print()
+            # print(f"CLS: {cls_tok}")
             # quit()
         
         elif args.dataset == "TFC2":  # New TFC2 logic
@@ -546,21 +551,23 @@ def segment_tokens_all(data, labels, qids, perturb_type, full_q_dict, selected_t
             inj_toks_idxs = list(range(inj_toks_start_idx, inj_toks_end_idx + 1))
             non_q_term_idxs = list(set(all_doc_idxs) - set(q_term_inj_idxs) - set(q_term_non_inj_idxs) - set(inj_toks_idxs))
             non_q_term_toks = np.mean(result[:,:,non_q_term_idxs], axis=-1)[:,:,np.newaxis] # shape: (n_components, n_layers, 1)
+            # non_q_term_toks = np.zeros((result.shape[0], result.shape[1], 1))
 
-            # # check if segmentation makes sense
             # print(f"Full label: {label}")
             # print()
             # print(f"Full query: {full_q}")
             # print()
             # print(f"Og label: {label[:og_doc_end_idx]}")
             # print()
-            # print(f"Inject tokens: {label[inj_toks_start_idx:inj_toks_end_idx]}")
+            # print(f"Injected: {[label[x] for x in inj_toks_idxs]}")
+            # print()
+            # print(f"Query terms matching injected: {[label[x] for x in q_term_non_inj_idxs]}")
             # print()
             # print(f"Query terms not matching injected: {[label[x] for x in q_term_non_inj_idxs]}")
             # print()
-            # print(f"Query terms matching injected: {[label[x] for x in q_term_inj_idxs]}")
-            # print()
             # print(f"Non query terms: {[label[x] for x in non_q_term_idxs]}")
+            # print()
+            # print(f"CLS: {cls_tok}")
             # quit()
 
         # Get [SEP] token
@@ -571,40 +578,61 @@ def segment_tokens_all(data, labels, qids, perturb_type, full_q_dict, selected_t
             [cls_tok, inj_toks, q_term_inj_toks, q_term_non_inj_toks, non_q_term_toks, sep_tok], axis=2
         )
 
+        # print("New result")
+        # for res in [cls_tok, inj_toks, q_term_inj_toks, q_term_non_inj_toks, non_q_term_toks, sep_tok]:
+        #     # check nans
+        #     print(f"Existence of NaNs: {np.isnan(res).sum()}")
+        #     print(res.shape)
+
         segmented_data.append(new_result)
 
-    return np.mean(np.array(segmented_data), axis=0)
+    # NOTE: not the nicest solution, but needed as there are unexpected infs and nans (not many)
+    print(f"Existence of NaNs: {np.isnan(segmented_data).sum()} and infs: {np.isinf(segmented_data).sum()}")
+    segmented_data = np.where(np.isinf(segmented_data), np.nan, segmented_data)
+    return np.nanmean(np.array(segmented_data), axis=0)
 
 
-def plot_blocks_plotly(data, labels, save_path):
+def plot_blocks_plotly(data, labels, save_path, args):
 
     # NOTE: normalize data, 2 options
     max_abs_val = max(abs(data.min()), abs(data.max()))
     normalized_data = data / max_abs_val
-    normalized_data = data / (args.TFC2_K + 1)
-    max_norm_data = np.max(np.abs(normalized_data))
+    print(f"Max abs val: {max_abs_val}")
+    # normalized_data = data / (args.TFC2_K + 1)
+    # max_norm_data = np.max(np.abs(normalized_data))
 
     fig = sp.make_subplots(rows=1, cols=3, subplot_titles=['Residual Stream', 'Attn Output', 'MLP Output'], shared_yaxes=True, horizontal_spacing=0.1)
 
     # Create heatmaps for each experiment
     for i in range(3):
         heatmap_data = normalized_data[i, :, :]
-        heatmap = go.Heatmap(z=heatmap_data, colorscale='RdBu', zmin=-max_norm_data, zmax=max_norm_data) #zmin=-1, zmax=1
+        heatmap = go.Heatmap(z=heatmap_data, colorscale='RdBu', zmin=-1, zmax=1) #zmin=-1, zmax=1
         fig.add_trace(heatmap, row=1, col=i+1)
 
+    if args.dataset == "TFC1-I":
+        suffix = f" {args.TFC1_I_perturb_type}"
+    elif args.dataset == "TFC1-R":
+        suffix = ""
+    elif args.dataset == "TFC2":
+        suffix = f", K = {args.TFC2_K}"
+
     fig.update_layout(
-        title='Activation Patching Per Block',
-        xaxis=dict(title="Position", showline=True, showgrid=False, tickvals=np.arange(len(labels)),ticktext=labels),
+        title=f'Activation Patching Per Block for {args.dataset}{suffix}',
+        xaxis=dict(showline=True, showgrid=False, tickvals=np.arange(len(labels)),ticktext=labels),
         yaxis=dict(title="Layer", showline=True, showgrid=False),
-        xaxis2=dict(title="Position", showline=True, showgrid=False, tickvals=np.arange(len(labels)),ticktext=labels),
-        xaxis3=dict(title="Position", showline=True, showgrid=False, tickvals=np.arange(len(labels)),ticktext=labels),
+        xaxis2=dict(showline=True, showgrid=False, tickvals=np.arange(len(labels)),ticktext=labels),
+        xaxis3=dict(showline=True, showgrid=False, tickvals=np.arange(len(labels)),ticktext=labels),
         width=1000,
     )
 
+    # rotate x labels vertical and make the labels a bit bigger
+    for i in range(3):
+        fig.update_xaxes(tickangle=90, row=1, col=i+1)
+        fig.update_xaxes(tickfont=dict(size=14), row=1, col=i+1)
+        
+
     if save_path:
-        # NOTE: pio write image is terribly slow
-        fig.write_html(save_path.replace('.png', '.html'))
-        # pio.write_image(fig, save_path, scale=1, format='png')
+        fig.write_image(save_path, format="png", width=800, height=400, scale=2)
 
     return fig
 
@@ -618,16 +646,15 @@ def plot_heads(data, save_path):
     # NOTE: normalize data, 2 options
     max_abs_val = max(abs(data.min()), abs(data.max()))
     # normalized_data = data / max_abs_val
-    normalized_data = data / (args.TFC2_K + 1)
-    max_norm_data = np.max(np.abs(normalized_data))
-
+    # normalized_data = data / (args.TFC2_K + 1)
+    # max_norm_data = np.max(np.abs(normalized_data))
 
     plt.figure(figsize=(10, 6))
     sns.heatmap(
-        normalized_data,
+        data,
         cmap='RdBu',
-        vmin=-max_norm_data, #-1,
-        vmax=max_norm_data, #1,
+        vmin=-max_abs_val, #-1,
+        vmax=max_abs_val, #1,
         xticklabels=True,
         yticklabels=True,
         annot=True,
@@ -657,7 +684,7 @@ def grouped_bar_chart(data_array, heads, label_segs, save_path=None):
 
     # Add labels and title
     ax.set(xlabel='Token Type', ylabel='Avg Attention Scores', title='Top Ranked Perturbed Documents')
-    ax.set_xticklabels(ax.get_xticklabels(), rotation=45, fontsize=8, ha="right")
+    ax.set_xticklabels(ax.get_xticklabels(), fontsize=8, ha="center")
 
     if save_path:
         plt.savefig(save_path, bbox_inches='tight', dpi=1200)
@@ -674,7 +701,11 @@ def main(args):
     plot = [args.experiment_type]
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     os.makedirs(f"figures/{args.dataset}", exist_ok=True)
-    labels = ["[CLS]", "injected tokens", "query tokens matching injected", "query tokens not matching injected", "non query tokens", "[SEP]"]
+    # labels = ["[CLS]", "injected tokens", "query tokens matching injected", "query tokens not matching injected", "non query tokens", "[SEP]"]
+    # labels = [r"$tok_{CLS}$", r"$tok_{inj}$", r"$tok_{qterm+}$", r"$tok_{qterm-}$", r"$tok_{other}$", r"$tok_{SEP}$"]
+    # labels = [r"tok_{CLS}", r"tok_{inj}", r"tok_{qterm+}", r"tok_{qterm-}", r"tok_{other}", r"tok_{SEP}"]
+    labels = ['$\\text{tok}_{\\text{CLS}}$', '$\\text{tok}_{\\text{inj}}$', '$\\text{tok}_{\\text{qterm+}}$', 
+          '$\\text{tok}_{\\text{qterm-}}$', '$\\text{tok}_{\\text{other}}$', '$\\text{tok}_{\\text{SEP}}$']
     if args.dataset == "TFC2":
         scores_csv_path = f"data/{args.dataset}/computed_results_{args.TFC1_I_perturb_type}_{args.TFC2_K}.csv"
         folder_suffix = f"/{args.TFC1_I_perturb_type}/{args.TFC2_K}"
@@ -689,19 +720,19 @@ def main(args):
 
     # Load full queries and selected terms
     full_query_dict, selected_terms_dict = load_queries("data/queries.jsonl", f"data/selected_query_terms.csv") 
+
+    print(f"| Plotting {plot} for {args.dataset} dataset")
     
     if "block" in plot:   
         # Load, segment, and plot average block results
-        print("plotting all block results")
         all_block_results,  all_block_labels, all_block_qids, _ = load_all_results("block", f"{args.results_folder}/results/{folder_suffix}")
         all_block_segmented = segment_tokens_all(all_block_results, all_block_labels, all_block_qids, perturb_type, full_query_dict, selected_terms_dict, tokenizer, args)
-        _ = plot_blocks_plotly(all_block_segmented, labels, f"{args.figure_folder}/divK_normed_all_block_seg.png")
+        _ = plot_blocks_plotly(all_block_segmented, labels, f"{args.figure_folder}/normed_all_block_seg.png", args)
 
     
     if "head_all" in plot:
         #  Load and plot head results for top/bottom ranked documents
         print("plotting head results for top ranked documents")
-
         top_ranked_doc_head_results, _, _ = load_doc_results_by_rank(
             scores_csv_path, 
             "head", 
@@ -710,8 +741,13 @@ def main(args):
             rank_start=1, 
             rank_end=10
         )
+
+        # get min max values
         avg_top_ranked_doc_head_results = np.mean(top_ranked_doc_head_results, axis=0)
-        _ = plot_heads(avg_top_ranked_doc_head_results, f"{args.figure_folder}/divK_top_ranked_doc_head_results.png")
+
+        max_abs_val = max(abs(avg_top_ranked_doc_head_results.min()), abs(avg_top_ranked_doc_head_results.max()))
+
+        _ = plot_heads(avg_top_ranked_doc_head_results, f"{args.figure_folder}/top_ranked_doc_head_results.png")
 
         print("plotting head results for bottom ranked documents")
         bottom_ranked_doc_head_results, _, _ = load_doc_results_by_rank(
@@ -723,11 +759,10 @@ def main(args):
             rank_end=100
         )
         avg_bottom_ranked_doc_head_results = np.mean(bottom_ranked_doc_head_results, axis=0)
-        _ = plot_heads(avg_bottom_ranked_doc_head_results, f"{args.figure_folder}/divK_bottom_ranked_doc_head_results.png")
+        _ = plot_heads(avg_bottom_ranked_doc_head_results, f"{args.figure_folder}/bottom_ranked_doc_head_results.png")
 
 
     if "head_pos" in plot:
-
         # head patching and attention patterns for top ranked documents by position
         heads = [(0,9), (1,6), (2,3), (3,8)]
         scores_df = pd.read_csv(scores_csv_path)
@@ -743,16 +778,18 @@ def main(args):
             selected_terms_dict, 
             tokenizer
         )
-        labels = ["cls", "inj", "q_term_inj", "q_term_non_inj", "non_q_term", "sep"]
-        _ = grouped_bar_chart(head_decomp_data[0].T, heads, labels, save_path=f"{args.figure_folder}/head_decomp_top_heads_overall.png")
-        _ = grouped_bar_chart(head_decomp_data[1].T, heads, labels, save_path=f"{args.figure_folder}/head_decomp_top_heads_exists.png")
-        _ = grouped_bar_chart(head_decomp_data[2].T, heads, labels, save_path=f"{args.figure_folder}/head_decomp_top_heads_not_exists.png")
+        # labels = ["cls", "inj", "q_term_inj", "q_term_non_inj", "non_q_term", "sep"]
+        labels = ['$\\text{tok}_{\\text{CLS}}$', '$\\text{tok}_{\\text{inj}}$', '$\\text{tok}_{\\text{qterm+}}$', 
+          '$\\text{tok}_{\\text{qterm-}}$', '$\\text{tok}_{\\text{other}}$', '$\\text{tok}_{\\text{SEP}}$']
+        _ = grouped_bar_chart(head_decomp_data[0].T, heads, labels, save_path=f"{args.figure_folder}/NEW_head_decomp_top_heads_overall.png")
+        _ = grouped_bar_chart(head_decomp_data[1].T, heads, labels, save_path=f"{args.figure_folder}/NEW_head_decomp_top_heads_exists.png")
+        _ = grouped_bar_chart(head_decomp_data[2].T, heads, labels, save_path=f"{args.figure_folder}/NEW_head_decomp_top_heads_not_exists.png")
 
 
     if "head_attn" in plot:
-    
-        print("plotting head attention")
-        heads = [(0,9), (1,6), (2,3), (3,8)]
+        # NOTE: these are the old heads. Other heads come up in the reproduction
+        # heads = [(0,9), (1,6), (2,3), (3,8)]
+        heads = [(0, 9), (1, 6), (2, 3), (4,0)]
         scores_df = pd.read_csv(scores_csv_path)
         head_data = load_head_pattern_by_rank(
             f"{args.results_folder}/results_attn_pattern/{folder_suffix}", 
@@ -766,22 +803,29 @@ def main(args):
             selected_terms_dict, 
             tokenizer
         )
-        labels = ["inj to qterm+", "qterm+ to inj", "inj to qterm-", "inj to sep", "other to sep"]
-        _ = grouped_bar_chart(head_data[0], heads, labels, save_path=f"{args.figure_folder}/head_attn_pattern_{perturb_type}_overall.png")
-        _ = grouped_bar_chart(head_data[1], heads, labels, save_path=f"{args.figure_folder}/head_attn_pattern_{perturb_type}_exists.png")
-        _ = grouped_bar_chart(head_data[2], heads, labels, save_path=f"{args.figure_folder}/head_attn_pattern_{perturb_type}_not_exists.png")
+        labels = [
+            r"$\text{tok}_{\text{inj}}$" + "\n" + r"$\text{to}$" + "\n" + r"$\text{tok}_{\text{qterm+}}$",
+            r"$\text{tok}_{\text{qterm+}}$" + "\n" + r"$\text{to}$" + "\n" + r"$\text{tok}_{\text{inj+}}$",
+            r"$\text{tok}_{\text{inj}}$" + "\n" + r"$\text{to}$" + "\n" + r"$\text{tok}_{\text{qterm-}}$",
+            r"$\text{tok}_{\text{inj}}$" + "\n" + r"$\text{to}$" + "\n" + r"$\text{tok}_{\text{SEP}}$",
+            r"$\text{tok}_{\text{other}}$" + "\n" + r"$\text{to}$" + "\n" + r"$\text{tok}_{\text{SEP}}$"
+        ]
+
+        _ = grouped_bar_chart(head_data[0], heads, labels, save_path=f"{args.figure_folder}/NEW_head_attn_pattern_{perturb_type}_overall.png")
+        _ = grouped_bar_chart(head_data[1], heads, labels, save_path=f"{args.figure_folder}/NEW_head_attn_pattern_{perturb_type}_exists.png")
+        _ = grouped_bar_chart(head_data[2], heads, labels, save_path=f"{args.figure_folder}/NEW_head_attn_pattern_{perturb_type}_not_exists.png")
 
     return
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Plot results.")
-    parser.add_argument("--dataset", default="TFC2", choices=["TFC1-I", "TFC1-R", "TFC2"])
-    parser.add_argument("--experiment_type", default="head_all", choices=["block", "head_all", "head_pos", "head_attn", "labels"], 
+    parser.add_argument("--dataset", default="TFC1-I", choices=["TFC1-I", "TFC1-R", "TFC2"])
+    parser.add_argument("--experiment_type", default="head_attn", choices=["block", "head_all", "head_pos", "head_attn", "labels"], 
                         help="What will be patched (e.g., block).")
     parser.add_argument("--TFC1_I_perturb_type", default="append", choices=["append", "prepend"], 
                         help="The perturbation to apply (e.g., append).")
-    parser.add_argument("--TFC2_K", default=10, type=int, choices=[1, 2, 5, 10, 50], help="K")
+    parser.add_argument("--TFC2_K", default=9, type=int, choices=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 50], help="K")
     args = parser.parse_args()
 
     # non variable args
