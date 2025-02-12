@@ -28,14 +28,6 @@ def load_jsonl_file_into_dict(fname):
     return data
 
 
-def load_json_file(file_path):
-    """Load a JSON file."""
-    with open(file_path, "r") as file:
-        # Load JSON data into a dictionary
-        data = json.load(file)
-    return data
-
-
 def load_label_file(file_path):
     """Load a label file."""
     # NOTE: changed encoding from utf-8 to ascii
@@ -48,12 +40,6 @@ def load_label_file(file_path):
         words.append(word)
 
     return words
-
-
-"""
-- rank: int [1,100] # TODO: change this to range?
-- rank_type: og_rank, p_rank
-"""
 
 
 def load_doc_results_by_rank(
@@ -779,7 +765,7 @@ def plot_blocks_plotly(data, labels, save_path, args):
         fig.update_xaxes(
             tickangle=90, title_font_size=20, tickfont=dict(size=20), row=1, col=i + 1
         )
-        fig.update_yaxes(tickfont=dict(size=20), title_font_size=20, row=1, col=i + 1)
+        fig.update_yaxes(tickfont=dict(size=20), title_font_size=16, row=1, col=i + 1)
 
     # make title bigger
     fig.update_layout(title_font_size=20)

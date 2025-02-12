@@ -19,9 +19,6 @@ from helpers import (
     load_tokenizer_and_models,
     preprocess_queries,
     preprocess_corpus,
-    encode_hf,
-    encode_tl,
-    compute_ranking_scores,
     create_df_from_nested_dict,
 )
 from patching_helpers import (
