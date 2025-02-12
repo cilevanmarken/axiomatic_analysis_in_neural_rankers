@@ -2,6 +2,8 @@
 Authors: Catherine Chen, Jack Merullo, and Carsten Eickhoff
 By Cile van Marken, University of Amsterdam
 
+This code corresponds to the paper __Reproducing and Extending Causal Insights Into Term Frequency Computation in Neural Rankers__.
+
 <!-- This code corresponds to the paper: __Axiomatic Causal Interventions for Reverse Engineering Relevance Computation in Neural Retrieval Models__, in _Proceedings of the 47th International ACM SIGIR Conference on Research and Development in Information Retrieval (SIGIR ’24)_, July 14–18, 2024, Washington, DC, USA. [Link to paper](https://arxiv.org/abs/2405.02503) -->
 
 ## Repository
@@ -58,7 +60,7 @@ To reproduce the experiments in the papers, first download the data from Google 
 Then run the following command to create the baseline and perturbed datasets for the experiment from the original documents.
 
 ```
-python create_datasets.py --dataset DATASET --TFC1_I_perturb_type TFC1_I_PERTURB_TYPE --TFC2_K [1, 2, 5, 10, 50]
+python create_datasets.py --dataset DATASET --TFC1_I_perturb_type TFC1_I_PERTURB_TYPE --TFC2_K [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 50]
 ```
 
 `DATASET`:
@@ -71,11 +73,8 @@ python create_datasets.py --dataset DATASET --TFC1_I_perturb_type TFC1_I_PERTURB
 - `prepend`: target query term added to the beginning of a document
 
 `TFC2_K` (for TFC2): list, possibly containing
-- 1: run experiment with baseline document with 1 appended query terms and perturbed document with 2 appended query terms.
-- 2: run experiment with baseline document with 2 appended query terms and perturbed document with 3 appended query terms.
-- 5: run experiment with baseline document with 5 appended query terms and perturbed document with 6 appended query terms.
-- 10: run experiment with baseline document with 10 appended query terms and perturbed document with 11 appended query terms.
-- 50: run experiment with baseline document with 11 appended query terms and perturbed document with 51 appended query terms.
+for k in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 50]:
+- run experiment with baseline document with k appended query terms and perturbed document with k + 1 appended query terms.
 
 
 ## Experiments
