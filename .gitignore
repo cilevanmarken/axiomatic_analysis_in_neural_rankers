@@ -1,6 +1,7 @@
 # these folders can be ignored
-data/
+data/TFC*
+data/og_data
 figures/
 results*/
-sketch.py
+sketch*
 paper.pdf

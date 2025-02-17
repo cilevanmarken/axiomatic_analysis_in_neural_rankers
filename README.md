@@ -1,8 +1,7 @@
 # Reproducing Axiomatic Causal Interventions for Reverse Engineering Relevance Computation in Neural Retrieval Models
-Authors: Catherine Chen, Jack Merullo, and Carsten Eickhoff
-By Cile van Marken, University of Amsterdam
+By Cile van Marken and Roxana Petcu, University of Amsterdam
 
-This code corresponds to the paper __Reproducing and Extending Causal Insights Into Term Frequency Computation in Neural Rankers__.
+This code corresponds to the paper __Reproducing and Extending Causal Insights Into Term Frequency Computation in Neural Rankers__. 
 
 <!-- This code corresponds to the paper: __Axiomatic Causal Interventions for Reverse Engineering Relevance Computation in Neural Retrieval Models__, in _Proceedings of the 47th International ACM SIGIR Conference on Research and Development in Information Retrieval (SIGIR ’24)_, July 14–18, 2024, Washington, DC, USA. [Link to paper](https://arxiv.org/abs/2405.02503) -->
 
@@ -44,7 +43,7 @@ To install an environment with all neccesary packages, run the following command
 conda create --name ACI_env python=3.9
 conda activate ACI_env
 pip install ./TransformerLens
-pip install -r requirements.txt
+conda env update --name ACI_env --file environment.yml
 ```
 
 This code uses a copy of the [TransformerLens](https://github.com/neelnanda-io/TransformerLens) package, with additional changes to support activation patching in a retrieval setting. Changes made to the original TransformerLens package to support activation patching for retrieval (TAS-B) can be found in the following files:
@@ -55,9 +54,7 @@ This code uses a copy of the [TransformerLens](https://github.com/neelnanda-io/T
 
 
 ## Data and diagnostic datasets
-To reproduce the experiments in the papers, first download the data from Google Drive --> TODO. 
-<!-- [download the data from Google Drive](https://drive.google.com/file/d/1duqXgx2iqPyoom0Nui3nwy33rqjt5pll/view?usp=drive_link) -->
-Then run the following command to create the baseline and perturbed datasets for the experiment from the original documents.
+The file data / baseline.json contains the original top 100 ranked documents per query, for 100 queries. Run the following command to create the baseline and perturbed datasets for the different experiments from the original documents.
 
 ```
 python create_datasets.py --dataset DATASET --TFC1_I_perturb_type TFC1_I_PERTURB_TYPE --TFC2_K [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 50]
