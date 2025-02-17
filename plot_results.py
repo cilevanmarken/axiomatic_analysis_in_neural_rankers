@@ -54,7 +54,7 @@ def load_doc_results_by_rank(
 ):
     """Load results for a specific rank range."""
     # Get query, doc ids. If TFC2: filter out p_score < og_score
-    if args.dataset == "TFC2":
+    if args.dataset == "TFC2" and args.filter:
         scores = pd.read_csv(
             scores_fname, usecols=["qid", "doc_id", "score_diff", rank_type]
         )
@@ -779,16 +779,23 @@ def plot_blocks_plotly(data, labels, save_path, args):
 def plot_heads(data, save_path, args, topbottom):
     """Plot head experiment results"""
 
+    # Get max absolute value for color normalization
+    if args.dataset == "TFC1-I":
+        max_abs_val = 1
+    else:
+        max_abs_val = np.max(np.abs(data))
+
     plt.figure(figsize=(10, 6))
     sns.heatmap(
         data,
         cmap="RdBu",
-        vmin=-1,
-        vmax=1,
+        vmin=-max_abs_val,
+        vmax=max_abs_val,
         xticklabels=True,
         yticklabels=True,
         annot=True,
         fmt=".2f",
+        annot_kws={"size": 11}
     )
 
     if args.dataset == "TFC1-I":
@@ -796,11 +803,14 @@ def plot_heads(data, save_path, args, topbottom):
     elif args.dataset == "TFC2":
         suffix = f"{args.dataset}-K{args.TFC2_K}"
     plt.title(
-        f"{suffix}: patching attention heads for {topbottom} ranked documents",
-        fontsize=15,
+        f"{suffix}: {topbottom}",
+        fontsize=20,
     )
-    plt.xlabel("Head", fontsize=12)
-    plt.ylabel("Layer", fontsize=12)
+    plt.xlabel("Head", fontsize=16)
+    plt.ylabel("Layer", fontsize=16)
+    plt.xticks(fontsize=12)
+    plt.yticks(fontsize=12)
+
 
     if save_path:
         plt.savefig(save_path, dpi=1200)
@@ -937,7 +947,9 @@ def main(args):
 
     if "head_pos" in plot:
         # head patching and attention patterns for top ranked documents by position
-        heads = [(0, 9), (1, 6), (2, 3), (3, 8)]
+        # NOTE: these are the old heads. Other heads come up in the reproduction
+        # heads = [(0,9), (1,6), (2,3), (3,8)]
+        heads = [(0, 9), (1, 6), (2, 3)]
         scores_df = pd.read_csv(scores_csv_path)
         head_decomp_data = load_head_decomp_by_rank(
             f"{args.results_folder}/results_head_decomp/{folder_suffix}",
@@ -996,30 +1008,20 @@ def main(args):
             tokenizer,
         )
         labels = [
-            r"$\text{tok}_{\text{inj}}$"
-            + "\n"
-            + r"$\text{to}$"
-            + "\n"
+            r"$\text{tok}_{\text{inj}}$" + "\n"
+            + r"$\text{to}$" + "\n"
             + r"$\text{tok}_{\text{qterm+}}$",
-            r"$\text{tok}_{\text{qterm+}}$"
-            + "\n"
-            + r"$\text{to}$"
-            + "\n"
+            r"$\text{tok}_{\text{qterm+}}$" + "\n"
+            + r"$\text{to}$" + "\n"
             + r"$\text{tok}_{\text{inj+}}$",
-            r"$\text{tok}_{\text{inj}}$"
-            + "\n"
-            + r"$\text{to}$"
-            + "\n"
+            r"$\text{tok}_{\text{inj}}$" + "\n"
+            + r"$\text{to}$" + "\n"
             + r"$\text{tok}_{\text{qterm-}}$",
-            r"$\text{tok}_{\text{inj}}$"
-            + "\n"
-            + r"$\text{to}$"
-            + "\n"
+            r"$\text{tok}_{\text{inj}}$" + "\n"
+            + r"$\text{to}$" + "\n"
             + r"$\text{tok}_{\text{SEP}}$",
-            r"$\text{tok}_{\text{other}}$"
-            + "\n"
-            + r"$\text{to}$"
-            + "\n"
+            r"$\text{tok}_{\text{other}}$" + "\n"
+            + r"$\text{to}$" + "\n"
             + r"$\text{tok}_{\text{SEP}}$",
         ]
 
@@ -1053,7 +1055,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--experiment_type",
         default="block",
-        choices=["block", "head_all", "head_pos", "head_attn", "labels"],
+        choices=["block", "head_all", "head_all", "head_pos", "head_attn", "labels"],
         help="What will be patched (e.g., block).",
     )
     parser.add_argument(
@@ -1068,6 +1070,12 @@ if __name__ == "__main__":
         type=int,
         choices=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 50],
         help="K",
+    )
+    parser.add_argument(
+        "--filter",
+        default=False,
+        type=bool,
+        help="For TFC2: whether to filter out documents where the perturbed score is lower than the original score.",
     )
     args = parser.parse_args()
 
