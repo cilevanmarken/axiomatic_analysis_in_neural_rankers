@@ -51,17 +51,34 @@ def load_label_file(file_path):
 - rank: int [1,100] # TODO: change this to range?
 - rank_type: og_rank, p_rank
 '''
-def load_doc_results_by_rank(scores_fname, result_type, results_path, labels_path, rank_start=1, rank_end=10, rank_type="og_rank"):
+def load_doc_results_by_rank(scores_fname, result_type, results_path, labels_path, args, rank_start=1, rank_end=10, rank_type="og_rank", relevance="top"):
 
     # Get query, doc ids
-    scores = pd.read_csv(scores_fname, usecols=["qid", "doc_id", rank_type])
-    filtered_scores = scores[scores[rank_type].isin(list(range(rank_start, rank_end+1)))]
-    target_docs = list(filtered_scores[["qid","doc_id"]].to_records(index=False))
+    scores = pd.read_csv(scores_fname, usecols=["qid", "doc_id", rank_type, "p_rank", "percent_change", "og_score", "p_score"])
 
-    # # NOTE: check top 10 docs per K
-    # for qid in filtered_scores["qid"].unique():
-    #     print(filtered_scores[filtered_scores["qid"] == qid].sort_values(by="og_rank").head(10))
-    #     quit()
+    # filter pairs that do not adhere to TFC1
+    if args.filter:
+        
+        # how many instances are removed between start and end rank
+        removed = scores[(scores["percent_change"] <= 0)]
+        print(f"Number of pairs that do not adhere to TFC1: {len(removed)}")
+
+        # Remove those and recalculate og_rank and p_rank based on 'og_score' after filtering
+        scores = scores[scores["percent_change"] > 0]
+        scores = scores.sort_values(by=['qid', 'og_score'], ascending=[True, False])
+        scores['og_rank'] = scores.groupby('qid')['og_score'].rank(method='first', ascending=False).astype(int)
+        scores = scores.sort_values(by=['qid', 'p_score'], ascending=[True, False])
+        scores['og_rank'] = scores.groupby('qid')['p_score'].rank(method='first', ascending=False).astype(int)
+
+    # take the highest ranking documents
+    if relevance == "top":
+        filtered_scores = scores[scores[rank_type].isin(list(range(rank_start, rank_end+1)))]
+    # take the lowest ranking documents
+    if relevance == "bottom":
+        scores["inverted_rank"] = scores.groupby('qid')['og_score'].rank(method='first', ascending=True).astype(int)
+        filtered_scores = scores[scores["inverted_rank"].isin(list(range(rank_start, rank_end+1)))]
+
+    target_docs = list(filtered_scores[["qid","doc_id"]].to_records(index=False))
 
     # Load files
     results, labels, qids = [], [], []
@@ -153,6 +170,7 @@ def load_head_pattern_by_rank(results_path, labels_path, perturb_type, score_df,
     results = {}
     exists_results = {}
     not_exists_results = {}
+
     for qid, doc_id in target_docs:
         # Get label and segment
         label_fname = os.path.join(labels_path, "{}_{}_labels.txt".format(qid, doc_id))
@@ -778,18 +796,20 @@ def main(args):
 
     
     if "head_all" in plot:
-        #  Load and plot head results for top/bottom ranked documents
-        print("plotting head results for top ranked documents")
-        top_ranked_doc_head_results, _, _ = load_doc_results_by_rank(
-            scores_csv_path, 
-            "head", 
-            f"{args.results_folder}/results_head_decomp/{folder_suffix}", 
-            f"{args.results_folder}/results_head_decomp/{folder_suffix}", 
-            rank_start=1, 
-            rank_end=10
-        )
-        avg_top_ranked_doc_head_results = np.mean(top_ranked_doc_head_results, axis=0)
-        _ = plot_heads(avg_top_ranked_doc_head_results, f"{args.figure_folder}/top_ranked_doc_head_results.png")
+        # #  Load and plot head results for top/bottom ranked documents
+        # print("plotting head results for top ranked documents")
+        # top_ranked_doc_head_results, _, _ = load_doc_results_by_rank(
+        #     scores_csv_path, 
+        #     "head", 
+        #     f"{args.results_folder}/results_head_decomp/{folder_suffix}", 
+        #     f"{args.results_folder}/results_head_decomp/{folder_suffix}", 
+        #     args
+        # )
+        # avg_top_ranked_doc_head_results = np.mean(top_ranked_doc_head_results, axis=0)
+        # if args.filter: 
+        #     _ = plot_heads(avg_top_ranked_doc_head_results, f"{args.figure_folder}/filtered_top_heads_{args.TFC2_K}.png")
+        # else:
+        #     _ = plot_heads(avg_top_ranked_doc_head_results, f"{args.figure_folder}/top_heads_{args.TFC2_K}.png")
 
         print("plotting head results for bottom ranked documents")
         bottom_ranked_doc_head_results, _, _ = load_doc_results_by_rank(
@@ -797,11 +817,14 @@ def main(args):
             "head", 
             f"{args.results_folder}/results_head_decomp/{folder_suffix}", 
             f"{args.results_folder}/results_head_decomp/{folder_suffix}", 
-            rank_start=91, 
-            rank_end=100
+            args
         )
         avg_bottom_ranked_doc_head_results = np.mean(bottom_ranked_doc_head_results, axis=0)
-        _ = plot_heads(avg_bottom_ranked_doc_head_results, f"{args.figure_folder}/bottom_ranked_doc_head_results.png")
+        print(f"Avg bottom ranked doc head results: {avg_bottom_ranked_doc_head_results.shape}")
+        if args.filter: 
+            _ = plot_heads(avg_bottom_ranked_doc_head_results, f"{args.figure_folder}/filtered_bottom_heads_{args.TFC2_K}.png")
+        else:
+            _ = plot_heads(avg_bottom_ranked_doc_head_results, f"{args.figure_folder}/top_heads_{args.TFC2_K}.png")
 
 
     if "head_pos" in plot:
@@ -856,7 +879,9 @@ if __name__ == "__main__":
                         help="What will be patched (e.g., block).")
     parser.add_argument("--TFC1_I_perturb_type", default="append", choices=["append", "prepend"], 
                         help="The perturbation to apply (e.g., append).")
-    parser.add_argument("--TFC2_K", default=10, type=int, choices=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 50], help="K")
+    parser.add_argument("--TFC2_K", default=10, type=int, choices=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10], help="K")
+    parser.add_argument("--filter", type=bool, default=True, choices=[True, False],
+                        help="Whether to filter the results for TFC2 and TFC22 datasets.")
     args = parser.parse_args()
 
     # non variable args
