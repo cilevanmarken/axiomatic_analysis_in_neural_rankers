@@ -62,7 +62,7 @@ def run_experiment(args):
         os.makedirs(f"{args.logging_folder}/results_head_decomp/{args.TFC1_I_perturb_type}", exist_ok=True)
         os.makedirs(f"{args.logging_folder}/results_attn_pattern/{args.TFC1_I_perturb_type}", exist_ok=True)
 
-    if args.dataset in ["TFC2", "TFC22"]:
+    if args.dataset in ["TFC2"]:
         os.makedirs(f"{args.logging_folder}/results/{args.TFC1_I_perturb_type}/{args.TFC2_K}", exist_ok=True)
         os.makedirs(f"{args.logging_folder}/results_head_decomp/{args.TFC1_I_perturb_type}/{args.TFC2_K}", exist_ok=True)
         os.makedirs(f"{args.logging_folder}/results_attn_pattern/{args.TFC1_I_perturb_type}/{args.TFC2_K}", exist_ok=True)
@@ -78,9 +78,6 @@ def run_experiment(args):
     elif args.dataset == "TFC2":
         baseline_path = f"data/{args.dataset}/TFC2_{args.TFC2_K}_baseline.json"
         perturbed_path = f"data/{args.dataset}/TFC2_{args.TFC2_K}_corpus.json"
-    elif args.dataset == "TFC22":
-        baseline_path = f"data/{args.dataset}/TFC22_{args.TFC2_K}_baseline.json"
-        perturbed_path = f"data/{args.dataset}/TFC22_{args.TFC2_K}_corpus.json"
     elif args.dataset == "test":
         baseline_path = f"data/og_data/tfc1_add_baseline_final_dd_corpus.json"
         perturbed_path = f"data/{args.dataset}/TFC1-I_append_corpus.json"
@@ -213,7 +210,7 @@ def run_experiment(args):
                 
                 # Patch after each layer (residual stream, attention, MLPs)
                 if args.experiment_type == "block":
-                    if args.dataset in ["TFC2", "TFC22"]:
+                    if args.dataset in ["TFC2"]:
                         result_file = f"{args.logging_folder}/results/{args.TFC1_I_perturb_type}/{args.TFC2_K}/{qid}_{doc_id}_block.npy"
                     else:
                         result_file = f"{args.logging_folder}/results/{args.TFC1_I_perturb_type}/{qid}_{doc_id}_block.npy"
@@ -236,7 +233,7 @@ def run_experiment(args):
 
                 # Patch attention heads
                 elif args.experiment_type == "head_all":
-                    if args.dataset in ["TFC2", "TFC22"]:
+                    if args.dataset in ["TFC2"]:
                         result_file = f"{args.logging_folder}/results_head_decomp/{args.TFC1_I_perturb_type}/{args.TFC2_K}/{qid}_{doc_id}_head.npy"
                     else:
                         result_file = f"{args.logging_folder}/results_head_decomp/{args.TFC1_I_perturb_type}/{qid}_{doc_id}_head.npy"
@@ -259,7 +256,7 @@ def run_experiment(args):
 
                 # Patch heads by position
                 elif args.experiment_type == "head_pos":
-                    if args.dataset in ["TFC2", "TFC22"]:
+                    if args.dataset in ["TFC2"]:
                         raise NotImplementedError("TFC2 not implemented for head_attn, do not know which heads are important")
                         result_file = f"{args.logging_folder}/results_head_decomp/{args.TFC1_I_perturb_type}/{args.TFC2_K}/{qid}_{doc_id}_head_by_pos.npy"
                     else:
@@ -289,7 +286,7 @@ def run_experiment(args):
                     for layer, head in attn_heads:
                         attn_pattern = perturbed_cache["pattern", layer][:,head].mean(0).detach().cpu().numpy()
 
-                        if args.dataset in ["TFC2", "TFC22"]:
+                        if args.dataset in ["TFC2"]:
                             raise NotImplementedError("TFC2 not implemented for head_attn, do not know which heads are important")
                             if args.save: np.save(f"{args.logging_folder}/results_attn_pattern/{args.TFC1_I_perturb_type}/{args.TFC2_K}/{qid}_{doc_id}_{layer}_{head}_attn_pattern.npy", attn_pattern)
                         else:
@@ -301,7 +298,7 @@ def run_experiment(args):
                     labels = ["{} {}".format(tok,i) for i, tok in enumerate(decoded_tokens)]
 
                     if args.save: 
-                        if args.dataset in ["TFC2", "TFC22"]:
+                        if args.dataset in ["TFC2"]:
                             with open(f"{args.logging_folder}/results/{args.TFC1_I_perturb_type}/{args.TFC2_K}/{qid}_{doc_id}_labels.txt", "w", encoding='utf-8') as f:
                                 for item in labels:
                                     f.write(str(item) + '\n')
@@ -333,7 +330,7 @@ def run_experiment(args):
         return
     
     if args.save_intermediate:
-        if args.dataset in ["TFC2", "TFC22"]:
+        if args.dataset in ["TFC2"]:
             computed_results.to_csv(f"data/{args.dataset}/computed_results_{args.TFC1_I_perturb_type}_{args.TFC2_K}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", index=False)
         else:
             computed_results.to_csv(f"data/{args.dataset}/computed_results_{args.TFC1_I_perturb_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", index=False)
@@ -342,7 +339,7 @@ def run_experiment(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run activation patching with the specific patching experiment and perturbation types.")
-    parser.add_argument("--dataset", default="TFC22", choices=["TFC1-I", "TFC1-R", "TFC2", "TFC22"])
+    parser.add_argument("--dataset", default="TFC2", choices=["TFC1-I", "TFC1-R", "TFC2"])
     parser.add_argument("--experiment_type", default="block", choices=["block", "head_all", "head_pos", "head_attn", "labels", "test"], 
                         help="What will be patched (e.g., block).")
     parser.add_argument("--TFC1_I_perturb_type", default="append", choices=["append", "prepend"], 

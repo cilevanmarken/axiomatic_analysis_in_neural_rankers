@@ -35,16 +35,6 @@ def load_json_to_df(file_path):
     df = pd.DataFrame(flattened_data)
     return df
 
-# NOTE: outdated, words were already sampled
-# def sample_word(text):
-#     words = text.split()
-
-#     # # preprocess words
-#     # words = [word.strip().lower() for word in words]
-#     # words = [word.translate(str.maketrans('', '', string.punctuation)) for word in words]
-
-#     return random.choice(words)
-
 
 def save_dataset_as_dict(corpus):
 
@@ -80,9 +70,6 @@ def save_dataset(corpus, baseline_corpus, args, **kwargs):
         perturbed_path = f'data/{args.experiment}/{args.experiment}_{args.TFC1_I}_corpus.json'
         baseline_path = f'data/{args.experiment}/{args.experiment}_{args.TFC1_I}_baseline.json'
     elif args.experiment == 'TFC2':
-        perturbed_path = f'data/{args.experiment}/{args.experiment}_{kwargs["K"]}_corpus.json'
-        baseline_path = f'data/{args.experiment}/{args.experiment}_{kwargs["K"]}_baseline.json'
-    elif args.experiment == 'TFC22':
         perturbed_path = f'data/{args.experiment}/{args.experiment}_{kwargs["K"]}_corpus.json'
         baseline_path = f'data/{args.experiment}/{args.experiment}_{kwargs["K"]}_baseline.json'
     else:
@@ -156,7 +143,7 @@ def perturb_dataset(args):
         save_dataset(corpus, baseline_corpus, args)
 
     # TFC2: add query term K times
-    elif args.experiment == 'TFC22':
+    elif args.experiment == 'TFC2':
         for K in args.TFC2:
             TFC2_corpus = corpus.copy()
             TFC2_baseline_corpus = baseline_corpus.copy()
@@ -169,29 +156,12 @@ def perturb_dataset(args):
                 TFC2_corpus.at[i, 'text'] = perturbed_text
                 TFC2_baseline_corpus.at[i, 'text'] = baseline_perturbed_text
 
-            save_dataset(TFC2_corpus, TFC2_baseline_corpus, args, K=K)
-
-    # TFC2: add query term K times
-    elif args.experiment == 'TFC2':
-        for K in args.TFC2:
-            TFC2_corpus = corpus.copy()
-            TFC2_baseline_corpus = baseline_corpus.copy()
-            for i, row in TFC2_corpus.iterrows():
-                text = row['text'] + ' '
-                query_term = row['query_term']
-                perturbed_text = text + ' '.join([query_term]*(K + 1)) + ' ' + ' '.join([FILLER]*(50 - K))
-                baseline_perturbed_text = text + ' '.join([query_term]*K) + ' ' + ' '.join([FILLER]*(50 - K + 1))
-
-                TFC2_corpus.at[i, 'text'] = perturbed_text
-                TFC2_baseline_corpus.at[i, 'text'] = baseline_perturbed_text
-
-            save_dataset(TFC2_corpus, TFC2_baseline_corpus, args, K=K)
-            
+            save_dataset(TFC2_corpus, TFC2_baseline_corpus, args, K=K)           
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run activation patching with the specific patching experiment and perturbation types.")
-    parser.add_argument("--experiment", default="TFC22", choices=["TFC1-I", "TFC1-R", "TFC2", "TFC22"], 
+    parser.add_argument("--experiment", default="TFC2", choices=["TFC1-I", "TFC1-R", "TFC2"], 
                         help="The perturbation to apply (e.g., append).")
     parser.add_argument("--TFC1-I", default="prepend", choices=["append", "prepend"],
                         help="Wether to add the query term at the beginning or end of the text.")
