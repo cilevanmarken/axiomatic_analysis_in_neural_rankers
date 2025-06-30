@@ -611,6 +611,7 @@ def plot_blocks_plotly(data, labels, save_path):
         xaxis2=dict(title="Position", showline=True, showgrid=False, tickvals=np.arange(len(labels)),ticktext=labels),
         xaxis3=dict(title="Position", showline=True, showgrid=False, tickvals=np.arange(len(labels)),ticktext=labels),
         width=1000,
+        height=500,
     )
 
     # rotate x labels vertical and make the labels a bit biggerMore actions
@@ -831,7 +832,7 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Plot results.")
     parser.add_argument("--dataset", default="TFC2", choices=["TFC1-I", "TFC1-R", "TFC2"])
-    parser.add_argument("--experiment_type", default="head_all", choices=["block", "head_all", "head_pos", "head_attn", "labels"], 
+    parser.add_argument("--experiment_type", default="block", choices=["block", "head_all", "head_pos", "head_attn", "labels"], 
                         help="What will be patched (e.g., block).")
     parser.add_argument("--TFC1_I_perturb_type", default="append", choices=["append", "prepend"], 
                         help="The perturbation to apply (e.g., append).")
