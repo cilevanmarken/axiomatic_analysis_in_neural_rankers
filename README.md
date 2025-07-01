@@ -1,5 +1,4 @@
 # Reproducing Axiomatic Causal Interventions for Reverse Engineering Relevance Computation in Neural Retrieval Models
-By Cile van Marken and Roxana Petcu, University of Amsterdam
 
 This code corresponds to the paper __Reproducing and Extending Causal Insights Into Term Frequency Computation in Neural Rankers__. 
 
@@ -7,7 +6,6 @@ This code corresponds to the paper __Reproducing and Extending Causal Insights I
 
 ## Repository
 ```
-ProjAI/
 ├── data/
 │   ├── TFC1-I/
 │   ├── TFC1-R/
@@ -57,7 +55,7 @@ This code uses a copy of the [TransformerLens](https://github.com/neelnanda-io/T
 The file data / baseline.json contains the original top 100 ranked documents per query, for 100 queries. Run the following command to create the baseline and perturbed datasets for the different experiments from the original documents.
 
 ```
-python create_datasets.py --dataset DATASET --TFC1_I_perturb_type TFC1_I_PERTURB_TYPE --TFC2_K [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 50]
+python create_datasets.py --dataset DATASET --TFC1_I_perturb_type TFC1_I_PERTURB_TYPE --TFC2_K [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 ```
 
 `DATASET`:
@@ -70,7 +68,7 @@ python create_datasets.py --dataset DATASET --TFC1_I_perturb_type TFC1_I_PERTURB
 - `prepend`: target query term added to the beginning of a document
 
 `TFC2_K` (for TFC2): list, possibly containing
-for k in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 50]:
+for k in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]:
 - run experiment with baseline document with k appended query terms and perturbed document with k + 1 appended query terms.
 
 
