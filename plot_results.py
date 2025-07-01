@@ -746,9 +746,9 @@ def main(args):
         all_block_results,  all_block_labels, all_block_qids, _ = load_all_results("block", f"{args.results_folder}/results/{folder_suffix}", scores_csv_path, args)
         all_block_segmented = segment_tokens_all(all_block_results, all_block_labels, all_block_qids, perturb_type, full_query_dict, selected_terms_dict, tokenizer, args)
         if args.filter:
-            _ = plot_blocks_plotly(all_block_segmented, labels, f"{args.figure_folder}/filtered_block_{args.TFC2_K}_.png")
+            _ = plot_blocks_plotly(all_block_segmented, labels, f"{args.figure_folder}/filtered_block_{args.TFC2_K}.png")
         else:
-            _ = plot_blocks_plotly(all_block_segmented, labels, f"{args.figure_folder}/block_{args.TFC2_K}_.png")  
+            _ = plot_blocks_plotly(all_block_segmented, labels, f"{args.figure_folder}/block_{args.TFC2_K}.png")  
 
     if "head_all" in plot:
         #  Load and plot head results for top/bottom ranked documents
